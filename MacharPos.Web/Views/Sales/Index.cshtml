@@ -1,0 +1,91 @@
+@model List<MacharPos.Core.Entities.Sale>
+
+@{
+    ViewData["Title"] = "Sales";
+    var stationName = (string)ViewBag.StationName;
+    var quick = (string?)ViewBag.Quick;
+    var startDate = (string)ViewBag.StartDate;
+    var endDate = (string)ViewBag.EndDate;
+    var total = (decimal)ViewBag.Total;
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h5 mb-0">Sales History</h1>
+    <div class="text-secondary small">Station: <span class="fw-semibold">@stationName</span></div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-dark btn-sm" asp-action="New">New Sale</a>
+    <a class="btn btn-outline-success btn-sm"
+       asp-action="Export"
+       asp-route-quick="@quick"
+       asp-route-startDate="@startDate"
+       asp-route-endDate="@endDate">Export Excel</a>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <form class="row g-2 align-items-end" method="get">
+      <div class="col-12 col-md-3">
+        <label class="form-label">Quick</label>
+        <select class="form-select" name="quick">
+          <option value="">Custom</option>
+          <option value="today" selected="@(quick=="today")">Today</option>
+          <option value="week" selected="@(quick=="week")">Last 7 days</option>
+          <option value="month" selected="@(quick=="month")">This month</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label">Start</label>
+        <input class="form-control" type="date" name="startDate" value="@startDate" />
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label">End</label>
+        <input class="form-control" type="date" name="endDate" value="@endDate" />
+      </div>
+
+      <div class="col-12 col-md-3">
+        <button class="btn btn-outline-primary w-100">Apply</button>
+      </div>
+    </form>
+
+    <div class="mt-3 small text-secondary">Total in range: <span class="fw-semibold">₦@total.ToString("N2")</span></div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Date/Time</th>
+            <th>Receipt</th>
+            <th>Customer</th>
+            <th>Payment</th>
+            <th class="text-end">Total</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var s in Model)
+          {
+            <tr>
+              <td>@s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+              <td class="fw-semibold">@s.ReceiptNo</td>
+              <td>@(s.Customer?.Name ?? "Walk-in")</td>
+              <td>@s.PaymentMethod</td>
+              <td class="text-end">@s.Total.ToString("N2")</td>
+              <td class="text-end">
+                <a class="btn btn-outline-secondary btn-sm" asp-action="Receipt" asp-route-id="@s.Id">Receipt</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

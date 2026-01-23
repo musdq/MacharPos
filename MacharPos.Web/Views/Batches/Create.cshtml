@@ -1,0 +1,57 @@
+@model MacharPos.Core.Entities.LpgBatch
+@{
+  ViewData["Title"] = "New LPG Batch";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h5 mb-0">New LPG Batch</h1>
+  <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+  <div class="alert alert-danger">
+    @foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+    {
+      <div>@e.ErrorMessage</div>
+    }
+  </div>
+}
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post">
+      @Html.AntiForgeryToken()
+
+      <div class="mb-3">
+        <label class="form-label">Batch Number</label>
+        <input class="form-control" asp-for="BatchNo" placeholder="e.g. MAS-2026-001" />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Supplier (optional)</label>
+        <input class="form-control" asp-for="SupplierName" />
+      </div>
+
+      <div class="row g-2">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Date Received</label>
+          <input class="form-control" asp-for="DateReceived" type="date" value="@Model.DateReceived.ToString("yyyy-MM-dd")" />
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label">Quantity (kg)</label>
+          <input class="form-control" asp-for="QuantityKg" type="number" step="0.01" />
+          <div class="form-text">10MT = 10000kg</div>
+        </div>
+      </div>
+
+      <div class="mb-3 mt-2">
+        <label class="form-label">Cost per kg (optional)</label>
+        <input class="form-control" asp-for="CostPerKg" type="number" step="0.01" />
+      </div>
+
+      <button class="btn btn-dark w-100 mt-2">Create Batch</button>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,36 @@
+﻿/* Slightly larger touch targets for POS */
+.btn, .form-control, .form-select {
+    min-height: 42px;
+}
+
+.table td, .table th {
+    vertical-align: middle;
+}
+
+/* Receipt print page 80mm */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+}
+
+
+/* POS-friendly touch targets */
+.btn, .form-control, .form-select {
+    min-height: 44px;
+}
+
+/* Thermal receipt width */
+.receipt {
+    width: 80mm;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    body {
+        margin: 0;
+    }
+}

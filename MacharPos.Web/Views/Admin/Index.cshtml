@@ -1,0 +1,96 @@
+@model List<MacharPos.Web.ViewModels.Admin.UserListRowVm>
+@using MacharPos.Web.ViewModels.Admin
+
+@{
+    ViewData["Title"] = "Admin";
+    var createVm = (CreateUserVm)ViewBag.CreateVm;
+}
+
+<div class="row g-3">
+  <div class="col-12 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Create User</h2>
+
+        @if (TempData["Ok"] is string okMsg)
+        {
+          <div class="alert alert-success">@okMsg</div>
+        }
+
+        <form asp-action="Create" method="post">
+          @Html.AntiForgeryToken()
+
+          <div class="mb-2">
+            <label>Email</label>
+            <input class="form-control" name="Email" required />
+          </div>
+
+          <div class="mb-2">
+            <label>Password</label>
+            <input class="form-control" name="Password" required />
+          </div>
+
+          <div class="mb-2">
+            <label>Role</label>
+            <select class="form-select" name="Role">
+              @foreach (var r in createVm.Roles)
+              {
+                <option value="@r">@r</option>
+              }
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label>Home Station</label>
+            <select class="form-select" name="HomeStationId">
+              @foreach (var s in createVm.Stations)
+              {
+                <option value="@s.Id">@s.Name</option>
+              }
+            </select>
+          </div>
+
+          <button class="btn btn-primary w-100">Create User</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Users</h2>
+
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Station</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach (var u in Model)
+            {
+              <tr>
+                <td>@u.Email</td>
+                <td>@u.Role</td>
+                <td>@u.HomeStation</td>
+                <td>@(u.IsActive ? "Active" : "Locked")</td>
+                <td>
+                  <form asp-action="ToggleLock" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@u.Id" />
+                    <button class="btn btn-sm btn-warning">Toggle</button>
+                  </form>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

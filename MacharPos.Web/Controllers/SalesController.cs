@@ -67,9 +67,12 @@ public class SalesController : Controller
         }
         else
         {
-            // Custom range: treat as date-only in user's selection; store/query in UTC day boundaries
-            utcStart = (startDate?.Date ?? now.Date);
-            utcEndExclusive = (endDate?.Date ?? utcStart).AddDays(1);
+            var s = (startDate?.Date ?? now.Date);
+            var e = (endDate?.Date ?? s);
+
+            utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
+            utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
+
             if (utcEndExclusive < utcStart.AddDays(1))
                 utcEndExclusive = utcStart.AddDays(1);
         }
@@ -370,8 +373,13 @@ public class SalesController : Controller
         }
         else
         {
-            utcStart = (startDate?.Date ?? now.Date);
-            utcEndExclusive = (endDate?.Date ?? utcStart).AddDays(1);
+            var s = (startDate?.Date ?? now.Date);
+            var e = (endDate?.Date ?? s);
+
+            // IMPORTANT: mark as UTC so Npgsql accepts it for timestamptz comparisons
+            utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
+            utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
+
             if (utcEndExclusive < utcStart.AddDays(1))
                 utcEndExclusive = utcStart.AddDays(1);
         }

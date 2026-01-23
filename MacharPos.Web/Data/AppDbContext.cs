@@ -19,6 +19,9 @@ namespace MacharPos.Web.Data
         public DbSet<Sale> Sales => Set<Sale>();
         public DbSet<SaleItem> SaleItems => Set<SaleItem>();
 
+        public DbSet<DailyClose> DailyCloses => Set<DailyClose>();
+
+
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);
@@ -45,6 +48,14 @@ namespace MacharPos.Web.Data
             b.Entity<Sale>()
               .Property(x => x.CreatedAt)
               .HasColumnType("timestamp with time zone");
+
+            b.Entity<DailyClose>()
+              .HasIndex(x => new { x.StationId, x.CloseDate })
+              .IsUnique();
+
+            b.Entity<DailyClose>()
+              .Property(x => x.CloseDate)
+              .HasColumnType("date");
 
 
 

@@ -1,0 +1,24 @@
+Wiring notes:
+
+1) Add DbSet in AppDbContext:
+   public DbSet<DailyClose> DailyCloses => Set<DailyClose>();
+
+2) Add model config in OnModelCreating (recommended):
+   b.Entity<DailyClose>()
+     .HasIndex(x => new { x.StationId, x.CloseDate })
+     .IsUnique();
+
+   b.Entity<DailyClose>()
+     .Property(x => x.CloseDate)
+     .HasColumnType("timestamp without time zone"); // date-only
+
+3) Run migrations:
+   dotnet ef migrations add AddDailyClose -p MacharPos.Web -s MacharPos.Web
+   dotnet ef database update -p MacharPos.Web -s MacharPos.Web
+
+4) Roles:
+   - StationManager/Admin can close the day.
+   - SuperAdmin can modify a closed day via 'Recalculate & Update'.
+
+5) Add navbar link:
+   <li class="nav-item"><a class="nav-link" asp-controller="DailyClose" asp-action="Index">Daily Close</a></li>

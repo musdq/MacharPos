@@ -51,6 +51,74 @@ namespace MacharPos.Web.Migrations
                     b.ToTable("Customers");
                 });
 
+            modelBuilder.Entity("MacharPos.Core.Entities.DailyClose", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ActiveBatchRemainingKg")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("CashCounted")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("CashTotal")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("CashVariance")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CloseDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClosedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ModificationReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBySuperAdminId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("PosTotal")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("TotalLpgKg")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("TotalSales")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("TotalTransactions")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TransferTotal")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StationId", "CloseDate")
+                        .IsUnique();
+
+                    b.ToTable("DailyCloses");
+                });
+
             modelBuilder.Entity("MacharPos.Core.Entities.LpgBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -451,6 +519,17 @@ namespace MacharPos.Web.Migrations
                 });
 
             modelBuilder.Entity("MacharPos.Core.Entities.Customer", b =>
+                {
+                    b.HasOne("MacharPos.Core.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.DailyClose", b =>
                 {
                     b.HasOne("MacharPos.Core.Entities.Station", "Station")
                         .WithMany()

@@ -1,0 +1,49 @@
+@model MacharPos.Web.ViewModels.Customers.CustomerEditVm
+@{
+    ViewData["Title"] = "Edit Customer";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h5 mb-0">Edit Customer</h1>
+  <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+  <div class="alert alert-danger">
+    @foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+    {
+      <div>@e.ErrorMessage</div>
+    }
+  </div>
+}
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post">
+      @Html.AntiForgeryToken()
+
+      <div class="mb-3">
+        <label class="form-label">Name</label>
+        <input class="form-control" asp-for="Name" />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Phone (optional)</label>
+        <input class="form-control" asp-for="Phone" />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Address (optional)</label>
+        <input class="form-control" asp-for="Address" />
+      </div>
+
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" asp-for="IsActive" />
+        <label class="form-check-label">Active</label>
+      </div>
+
+      <button class="btn btn-dark w-100 mt-3">Save Changes</button>
+    </form>
+  </div>
+</div>

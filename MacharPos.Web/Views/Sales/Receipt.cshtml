@@ -50,11 +50,25 @@
       </tbody>
     </table>
 
-    <hr />
-    <div class="d-flex justify-content-between fw-semibold">
-      <div>Total</div>
-      <div>₦@Model.Total.ToString("N2")</div>
-    </div>
+        <hr />
+        <div class="d-flex justify-content-between">
+            <div class="fw-semibold">Subtotal</div>
+            <div class="fw-semibold">₦@Model.Subtotal.ToString("N2")</div>
+        </div>
+
+        @if (Model.DiscountAmount > 0)
+        {
+            <div class="d-flex justify-content-between">
+                <div class="fw-semibold">Discount</div>
+                <div class="fw-semibold">- ₦@Model.DiscountAmount.ToString("N2")</div>
+            </div>
+        }
+
+        <div class="d-flex justify-content-between fw-semibold mt-1">
+            <div>Total</div>
+            <div>₦@Model.Total.ToString("N2")</div>
+        </div>
+
 
     <div class="text-center small text-secondary mt-2">Thank you!</div>
   </div>

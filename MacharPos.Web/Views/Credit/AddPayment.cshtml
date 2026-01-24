@@ -1,0 +1,61 @@
+@model MacharPos.Web.ViewModels.Credit.CreditPaymentVm
+@{
+    ViewData["Title"] = "Add Credit Payment";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h5 mb-0">Add Payment</h1>
+  <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+  <div class="alert alert-danger">
+    @foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+    {
+      <div>@e.ErrorMessage</div>
+    }
+  </div>
+}
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="mb-2">
+      <div class="small text-secondary">Receipt</div>
+      <div class="fw-semibold">@Model.ReceiptNo</div>
+      <div class="small text-secondary">Customer</div>
+      <div>@Model.CustomerName</div>
+    </div>
+
+    <div class="row g-2">
+      <div class="col-12 col-md-4"><div class="border rounded p-2"><div class="small text-secondary">Total</div><div class="fw-semibold">₦@Model.Total.ToString("N2")</div></div></div>
+      <div class="col-12 col-md-4"><div class="border rounded p-2"><div class="small text-secondary">Paid</div><div class="fw-semibold">₦@Model.AmountPaid.ToString("N2")</div></div></div>
+      <div class="col-12 col-md-4"><div class="border rounded p-2"><div class="small text-secondary">Balance</div><div class="fw-semibold">₦@Model.Balance.ToString("N2")</div></div></div>
+    </div>
+
+    <hr/>
+
+    <form method="post">
+      @Html.AntiForgeryToken()
+      <input type="hidden" asp-for="SaleId" />
+
+      <div class="row g-2">
+        <div class="col-12 col-md-4">
+          <label class="form-label">Amount</label>
+          <input class="form-control" asp-for="Amount" type="number" step="0.01" />
+          <div class="form-text">If amount is more than balance, it will be capped to the balance.</div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Method</label>
+          <select class="form-select" asp-for="Method" asp-items="Model.PaymentMethods"></select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Note (optional)</label>
+          <input class="form-control" asp-for="Note" />
+        </div>
+      </div>
+
+      <button class="btn btn-dark w-100 mt-3">Save Payment</button>
+    </form>
+  </div>
+</div>

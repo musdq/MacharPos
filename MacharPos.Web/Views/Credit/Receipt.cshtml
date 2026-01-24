@@ -1,0 +1,84 @@
+@model MacharPos.Core.Entities.Sale
+@{
+    ViewData["Title"] = "Credit Receipt";
+}
+
+<div class="no-print d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h5 mb-0">Credit Receipt</h1>
+    <div class="text-secondary small">@Model.ReceiptNo</div>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-dark btn-sm" onclick="window.print()">Print</button>
+    <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back to Credit</a>
+  </div>
+</div>
+
+<div class="receipt card shadow-sm mx-auto">
+  <div class="card-body p-3">
+    <div class="text-center fw-semibold">@Model.Station?.Name</div>
+    <div class="text-center small text-secondary">Machar POS - Credit Sale</div>
+    <hr />
+
+    <div class="small">
+      <div><span class="text-secondary">Receipt:</span> <span class="fw-semibold">@Model.ReceiptNo</span></div>
+      <div><span class="text-secondary">Date:</span> @Model.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+      <div><span class="text-secondary">Customer:</span> @(Model.Customer?.Name ?? "Walk-in")</div>
+      <div><span class="text-secondary">Due:</span> @(Model.CreditDueDate?.ToString("yyyy-MM-dd") ?? "-")</div>
+    </div>
+
+    <hr />
+
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th class="small">Item</th>
+          <th class="small text-end">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        @foreach (var it in Model.Items)
+        {
+          <tr>
+            <td class="small">
+              <div class="fw-semibold">@it.Product?.Name</div>
+              <div class="text-secondary">@it.Qty.ToString("N2") x ₦@it.UnitPrice.ToString("N2")</div>
+            </td>
+            <td class="small text-end">₦@it.LineTotal.ToString("N2")</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <hr />
+    <div class="d-flex justify-content-between">
+      <div class="fw-semibold">Total</div>
+      <div class="fw-semibold">₦@Model.Total.ToString("N2")</div>
+    </div>
+    <div class="d-flex justify-content-between">
+      <div class="fw-semibold">Paid</div>
+      <div class="fw-semibold">₦@Model.CreditAmountPaid.ToString("N2")</div>
+    </div>
+    <div class="d-flex justify-content-between">
+      <div class="fw-semibold">Balance</div>
+      <div class="fw-semibold">₦@Model.CreditBalance.ToString("N2")</div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.CreditNotes))
+    {
+      <div class="small text-secondary mt-2">Notes</div>
+      <div class="small">@Model.CreditNotes</div>
+    }
+
+    <div class="text-center small text-secondary mt-2">Thank you!</div>
+  </div>
+</div>
+
+<style>
+  .receipt { width: 80mm; max-width: 100%; }
+  @@media print {
+    .no-print { display: none !important; }
+    body { margin: 0; }
+    .card { box-shadow: none !important; }
+  }
+</style>

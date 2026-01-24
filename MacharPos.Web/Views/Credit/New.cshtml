@@ -1,0 +1,201 @@
+@model MacharPos.Web.ViewModels.Credit.CreditSaleCreateVm
+@using MacharPos.Core.Entities
+
+@{
+    ViewData["Title"] = "New Credit Sale";
+    var productPrices = (Dictionary<string, decimal>)ViewBag.ProductPrices;
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h1 class="h5 mb-0">New Credit Sale</h1>
+  <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+  <div class="alert alert-danger">
+    @foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+    {
+      <div>@e.ErrorMessage</div>
+    }
+  </div>
+}
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <form method="post" id="creditSaleForm">
+      @Html.AntiForgeryToken()
+
+      <div class="row g-2">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Customer</label>
+          <select class="form-select" asp-for="CustomerId" asp-items="Model.Customers"></select>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label">Due Date (optional)</label>
+          <input class="form-control" asp-for="DueDate" type="date" />
+        </div>
+
+        <div class="col-12 col-md-3">
+          <label class="form-label">Notes (optional)</label>
+          <input class="form-control" asp-for="Notes" placeholder="e.g. pay next week" />
+        </div>
+      </div>
+
+      <hr class="my-3"/>
+
+      <div class="d-flex align-items-center justify-content-between">
+        <div class="fw-semibold">Items</div>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="addLine()">Add Line</button>
+      </div>
+
+      <div class="table-responsive mt-2">
+        <table class="table table-sm align-middle" id="linesTable">
+          <thead>
+            <tr>
+              <th style="min-width:260px;">Product</th>
+              <th style="width:110px;">Qty</th>
+              <th style="width:160px;">Unit Price</th>
+              <th class="text-end" style="width:160px;">Line Total</th>
+              <th style="width:50px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+          @for (int i = 0; i < Model.Lines.Count; i++)
+          {
+            <tr>
+              <td>
+                <select class="form-select" name="Lines[@i].ProductId" onchange="onProductChange(this)">
+                  <option value="">Select...</option>
+                  @foreach (var p in Model.Products)
+                  {
+                    var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
+                    <option value="@p.Value" data-price="@price">@p.Text</option>
+                  }
+                </select>
+              </td>
+              <td>
+                <input class="form-control" name="Lines[@i].Qty" type="number" step="0.01" value="1" oninput="calcTotals()" />
+              </td>
+              <td>
+                <input class="form-control unitPrice" type="number" step="0.01" value="0" readonly />
+              </td>
+              <td class="text-end">
+                <span class="lineTotal">0.00</span>
+              </td>
+              <td class="text-end">
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button>
+              </td>
+            </tr>
+          }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="row g-2 mt-2">
+        <div class="col-12 col-md-4">
+          <label class="form-label">Initial Payment (optional)</label>
+          <input class="form-control" asp-for="InitialPaymentAmount" type="number" step="0.01" value="0" oninput="calcTotals()" />
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Initial Payment Method</label>
+          <select class="form-select" asp-for="InitialPaymentMethod" asp-items="Model.PaymentMethods"></select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label">Balance</label>
+          <input class="form-control" id="balanceBox" type="text" readonly value="0.00" />
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end mt-2">
+        <div class="fs-6">
+          Total: <span class="fw-semibold">₦<span id="grandTotal">0.00</span></span>
+        </div>
+      </div>
+
+      <button class="btn btn-dark w-100 mt-3">Create Credit Sale</button>
+    </form>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+  function onProductChange(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const price = parseFloat(opt.getAttribute("data-price") || "0");
+    const row = sel.closest("tr");
+    row.querySelector(".unitPrice").value = price.toFixed(2);
+    calcTotals();
+  }
+
+  function addLine() {
+    const tbody = document.querySelector("#linesTable tbody");
+    const idx = tbody.querySelectorAll("tr").length;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>
+        <select class="form-select" name="Lines[${idx}].ProductId" onchange="onProductChange(this)">
+          <option value="">Select...</option>
+          ${getProductsOptionsHtml()}
+        </select>
+      </td>
+      <td><input class="form-control" name="Lines[${idx}].Qty" type="number" step="0.01" value="1" oninput="calcTotals()" /></td>
+      <td><input class="form-control unitPrice" type="number" step="0.01" value="0" readonly /></td>
+      <td class="text-end"><span class="lineTotal">0.00</span></td>
+      <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button></td>
+    `;
+    tbody.appendChild(row);
+    calcTotals();
+  }
+
+  function removeLine(btn) {
+    const tbody = document.querySelector("#linesTable tbody");
+    const row = btn.closest("tr");
+    row.remove();
+
+    // Re-index names
+    const rows = tbody.querySelectorAll("tr");
+    rows.forEach((r, idx) => {
+      r.querySelectorAll("select, input").forEach(el => {
+        if (el.name) el.name = el.name.replace(/Lines\[\d+\]/, `Lines[${idx}]`);
+      });
+    });
+
+    calcTotals();
+  }
+
+  function calcTotals() {
+    const rows = document.querySelectorAll("#linesTable tbody tr");
+    let grand = 0;
+
+    rows.forEach(r => {
+      const qtyEl = r.querySelector('input[name$=".Qty"]');
+      const qty = parseFloat(qtyEl?.value || "0");
+      const price = parseFloat(r.querySelector(".unitPrice")?.value || "0");
+      const total = (qty * price) || 0;
+      r.querySelector(".lineTotal").innerText = total.toFixed(2);
+      grand += total;
+    });
+
+    document.getElementById("grandTotal").innerText = grand.toFixed(2);
+
+    const initialPaid = parseFloat(document.querySelector('[name="InitialPaymentAmount"]')?.value || "0");
+    const bal = Math.max(0, grand - (initialPaid || 0));
+    document.getElementById("balanceBox").value = bal.toFixed(2);
+  }
+
+  function getProductsOptionsHtml() {
+    const opts = [];
+    @foreach (var p in Model.Products)
+    {
+      var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
+      <text>opts.push(`<option value="@p.Value" data-price="@price">@p.Text</option>`);</text>
+    }
+    return opts.join("");
+  }
+
+  calcTotals();
+</script>
+}

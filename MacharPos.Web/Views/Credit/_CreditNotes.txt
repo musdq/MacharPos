@@ -1,0 +1,36 @@
+REQUIRED MODEL UPDATES (you will edit existing files):
+
+1) PaymentMethod enum: add Credit (used to mark credit sales).
+   Example:
+     public enum PaymentMethod { Cash = 0, Pos = 1, Transfer = 2, Credit = 3 }
+
+2) Sale entity: add these properties (and migrate):
+   public bool IsCreditSale { get; set; } = false;
+   public decimal CreditAmountPaid { get; set; } = 0m;
+   public decimal CreditBalance { get; set; } = 0m;
+   public CreditStatus CreditStatus { get; set; } = CreditStatus.Open;
+   public DateTime? CreditDueDate { get; set; } // date-only: map as 'date'
+   public string? CreditNotes { get; set; }
+
+   Also ensure CreatedAt is timestamptz (UTC) like we already fixed.
+
+3) Add CreditStatus enum (Core):
+   public enum CreditStatus { Open = 0, Settled = 1 }
+
+4) AppDbContext:
+   public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
+
+   And OnModelCreating recommendations:
+   - index: CreditPayments SaleId
+   - map CreditDueDate as 'date' (not timestamp):
+       b.Entity<Sale>().Property(x => x.CreditDueDate).HasColumnType("date");
+
+5) Run migrations:
+   dotnet ef migrations add AddCreditSales -p MacharPos.Web -s MacharPos.Web
+   dotnet ef database update -p MacharPos.Web -s MacharPos.Web
+
+6) NAVBAR links (optional):
+   <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="Index">Credit</a></li>
+
+7) Daily Close integration (later improvement):
+   In daily close snapshot, consider tracking CreditTotal separately and NOT counting credit in cash/POS/transfer.

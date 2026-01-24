@@ -195,4 +195,18 @@
 
 <style>
   .receipt { width: 100%; }
+
+    @@media print {
+        .no-print {
+            display: none !important;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .card {
+            box-shadow: none !important;
+        }
+    }
 </style>

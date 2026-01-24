@@ -6,7 +6,14 @@ using System.Threading.Tasks;
 
 namespace MacharPos.Core.Entities
 {
-    public enum PaymentMethod { Cash = 0, POS = 1, Transfer = 2 }
+    public enum PaymentMethod { Cash = 0, POS = 1, Transfer = 2, Credit = 3 }
+
+    public enum CreditStatus
+    {
+        Open = 0,
+        Settled = 1
+    }
+
 
     public class Sale
     {
@@ -30,6 +37,17 @@ namespace MacharPos.Core.Entities
         public decimal DiscountAmount { get; set; } = 0m;
         public string? DiscountApprovedByUserId { get; set; }
         public DateTime? DiscountApprovedAt { get; set; }
+
+        public bool IsCreditSale { get; set; } = false;
+
+        public decimal CreditAmountPaid { get; set; } = 0m;
+        public decimal CreditBalance { get; set; } = 0m;
+
+        public CreditStatus CreditStatus { get; set; } = CreditStatus.Open;
+
+        public DateTime? CreditDueDate { get; set; } // map as 'date'
+        public string? CreditNotes { get; set; }
+
 
     }
 

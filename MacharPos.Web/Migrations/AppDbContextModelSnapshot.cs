@@ -22,6 +22,37 @@ namespace MacharPos.Web.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MacharPos.Core.Entities.CreditPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReceivedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SaleId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SaleId");
+
+                    b.ToTable("CreditPayments");
+                });
+
             modelBuilder.Entity("MacharPos.Core.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -222,6 +253,21 @@ namespace MacharPos.Web.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal>("CreditAmountPaid")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CreditBalance")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("CreditDueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("CreditNotes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreditStatus")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("CustomerId")
                         .HasColumnType("uuid");
 
@@ -233,6 +279,9 @@ namespace MacharPos.Web.Migrations
 
                     b.Property<string>("DiscountApprovedByUserId")
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsCreditSale")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("PaymentMethod")
                         .HasColumnType("integer");
@@ -516,6 +565,17 @@ namespace MacharPos.Web.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.CreditPayment", b =>
+                {
+                    b.HasOne("MacharPos.Core.Entities.Sale", "Sale")
+                        .WithMany()
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sale");
                 });
 
             modelBuilder.Entity("MacharPos.Core.Entities.Customer", b =>

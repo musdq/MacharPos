@@ -1,5 +1,6 @@
 ﻿using MacharPos.Core.Entities;
 using MacharPos.Web.Auth;
+using MacharPos.Web.ViewModels.Credit;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
@@ -20,6 +21,9 @@ namespace MacharPos.Web.Data
         public DbSet<SaleItem> SaleItems => Set<SaleItem>();
 
         public DbSet<DailyClose> DailyCloses => Set<DailyClose>();
+
+        public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
+
 
 
         protected override void OnModelCreating(ModelBuilder b)
@@ -57,6 +61,9 @@ namespace MacharPos.Web.Data
               .Property(x => x.CloseDate)
               .HasColumnType("date");
 
+            b.Entity<Sale>()
+              .Property(x => x.CreditDueDate)
+              .HasColumnType("date");
 
 
             // Helpful indexes

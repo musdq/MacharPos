@@ -14,42 +14,67 @@ builder.Services.AddControllersWithViews();
 // --------------------
 // 1) Prefer standard connection string name: DefaultConnection
 // Read from correct env var mapping
-var cs = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// Fallback to direct env var (extra safety)
-cs ??= Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
-cs ??= Environment.GetEnvironmentVariable("DATABASE_URL");
+// Read connection string (Railway env var mapping)
+var cs =
+    builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("DATABASE_URL");
 
 if (string.IsNullOrWhiteSpace(cs))
-    throw new Exception("DB connection string not found. Set ConnectionStrings__DefaultConnection (Railway).");
+    throw new Exception("DB connection string not found. Set ConnectionStrings__DefaultConnection or DATABASE_URL.");
 
-// Clean common bad formatting
-cs = cs.Trim();
+cs = cs.Trim().Trim('"');
 
-// If you accidentally pasted JSON into the value, reject early with clear message
-if (cs.StartsWith("{"))
-    throw new Exception("Connection string looks like JSON. In Railway Variables, the VALUE must be only the URL, not JSON.");
+Console.WriteLine("[DB] Raw prefix: " + (cs.Length > 30 ? cs.Substring(0, 30) : cs));
 
-// Remove accidental quotes if present
-cs = cs.Trim('"');
+string npgsqlConnString;
 
-Console.WriteLine("[DB] Raw prefix: " + (cs.Length > 30 ? cs.Substring(0, 30) : cs)); // safe debug
-
-if (cs.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
-    cs = cs.Replace("postgres://", "postgresql://");
-
-// If it's URL style, convert to Npgsql keyword style (this is the key fix)
-if (cs.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+// If URL style, parse manually (works in all Npgsql versions)
+if (cs.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
+    cs.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
 {
+    // Normalize scheme
+    if (cs.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
+        cs = "postgresql://" + cs.Substring("postgres://".Length);
+
+    var uri = new Uri(cs);
+
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var username = Uri.UnescapeDataString(userInfo[0]);
+    var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+
+    var database = uri.AbsolutePath.TrimStart('/');
+    database = Uri.UnescapeDataString(database);
+
+    var b = new NpgsqlConnectionStringBuilder
+    {
+        Host = uri.Host,
+        Port = uri.Port > 0 ? uri.Port : 5432,
+        Database = database,
+        Username = username,
+        Password = password,
+
+        // Railway-safe defaults
+        SslMode = SslMode.Prefer,
+        TrustServerCertificate = true
+    };
+
+    npgsqlConnString = b.ConnectionString;
+}
+else
+{
+    // Already keyword format
     var b = new NpgsqlConnectionStringBuilder(cs)
     {
         SslMode = SslMode.Prefer,
         TrustServerCertificate = true
     };
-    cs = b.ToString();
+    npgsqlConnString = b.ConnectionString;
 }
 
-builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(cs));
+builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(npgsqlConnString));
+
 
 // --------------------
 // Identity

@@ -13,27 +13,43 @@ builder.Services.AddControllersWithViews();
 // Database connection
 // --------------------
 // 1) Prefer standard connection string name: DefaultConnection
+// Read from correct env var mapping
+var cs = builder.Configuration.GetConnectionString("DefaultConnection");
 
-string? cs = Environment.GetEnvironmentVariable("DATABASE_URL");
+// Fallback to direct env var (extra safety)
+cs ??= Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+cs ??= Environment.GetEnvironmentVariable("DATABASE_URL");
 
-// fallback to local appsettings for dev
 if (string.IsNullOrWhiteSpace(cs))
-    cs = builder.Configuration.GetConnectionString("DefaultConnection");
+    throw new Exception("DB connection string not found. Set ConnectionStrings__DefaultConnection (Railway).");
 
-if (string.IsNullOrWhiteSpace(cs))
-    throw new Exception("No DB connection configured.");
+// Clean common bad formatting
+cs = cs.Trim();
+
+// If you accidentally pasted JSON into the value, reject early with clear message
+if (cs.StartsWith("{"))
+    throw new Exception("Connection string looks like JSON. In Railway Variables, the VALUE must be only the URL, not JSON.");
+
+// Remove accidental quotes if present
+cs = cs.Trim('"');
+
+Console.WriteLine("[DB] Raw prefix: " + (cs.Length > 30 ? cs.Substring(0, 30) : cs)); // safe debug
 
 if (cs.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
     cs = cs.Replace("postgres://", "postgresql://");
 
-var npgsql = new NpgsqlConnectionStringBuilder(cs)
+// If it's URL style, convert to Npgsql keyword style (this is the key fix)
+if (cs.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
 {
-    // internal Railway host is fine; prefer SSL-safe default
-    SslMode = SslMode.Prefer,
-    TrustServerCertificate = true
-}.ToString();
-Console.WriteLine("DB=" + new NpgsqlConnectionStringBuilder(npgsql).Host);
-builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(npgsql));
+    var b = new NpgsqlConnectionStringBuilder(cs)
+    {
+        SslMode = SslMode.Prefer,
+        TrustServerCertificate = true
+    };
+    cs = b.ToString();
+}
+
+builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(cs));
 
 // --------------------
 // Identity

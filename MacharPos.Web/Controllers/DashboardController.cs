@@ -1,0 +1,114 @@
+﻿using MacharPos.Web.Data;
+using MacharPos.Web.Services;
+using MacharPos.Web.ViewModels.Dashboard;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace MacharPos.Web.Controllers
+{
+    [Authorize]
+    public class DashboardController : Controller
+    {
+        private readonly AppDbContext _db;
+        private readonly IStationContext _stationCtx;
+
+        public DashboardController(AppDbContext db, IStationContext stationCtx)
+        {
+            _db = db;
+            _stationCtx = stationCtx;
+        }
+
+
+        [HttpGet]
+        public async Task<IActionResult> Index()
+        {
+            var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+            var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
+
+            var nowUtc = DateTime.UtcNow;
+
+            // Today range (UTC)
+            var todayStart = DateTime.SpecifyKind(nowUtc.Date, DateTimeKind.Utc);
+            var todayEnd = todayStart.AddDays(1);
+
+            // Month range (UTC)
+            var monthStart = new DateTime(nowUtc.Year, nowUtc.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var monthEnd = monthStart.AddMonths(1);
+
+            // Week range (Mon..Sun) in UTC
+            DateTime StartOfWeekUtc(DateTime d)
+            {
+                var date = d.Date;
+                var diff = ((int)date.DayOfWeek + 6) % 7; // Monday=0
+                return DateTime.SpecifyKind(date.AddDays(-diff), DateTimeKind.Utc);
+            }
+            var weekStart = StartOfWeekUtc(nowUtc);
+            var weekEnd = weekStart.AddDays(7);
+
+            // Pull sales for month (covers week + today too)
+            var sales = await _db.Sales.AsNoTracking()
+                .Include(s => s.Items)
+                .Where(s => s.StationId == stationId && s.CreatedAt >= monthStart && s.CreatedAt < monthEnd)
+                .ToListAsync();
+
+            // KPI: Today's sales
+            var todaySales = sales.Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd).Sum(s => s.Total);
+
+            // KPI: LPG kg sold this month
+            var lpgKgSoldThisMonth = sales.SelectMany(s => s.Items).Sum(i => i.LpgKg ?? 0m);
+
+            // KPI: active batch remaining kg
+            var activeBatch = await _db.LpgBatches.AsNoTracking()
+                .FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == MacharPos.Core.Entities.LpgBatchStatus.Active);
+
+            var remainingKg = activeBatch?.RemainingKg ?? 0m;
+
+            // MONTHLY BAR (days of current month)
+            var daysInMonth = DateTime.DaysInMonth(nowUtc.Year, nowUtc.Month);
+            var monthDays = Enumerable.Range(1, daysInMonth)
+                .Select(d => new DateTime(nowUtc.Year, nowUtc.Month, d, 0, 0, 0, DateTimeKind.Utc))
+                .ToList();
+
+            var monthlyLabels = monthDays.Select(d => d.Day.ToString()).ToList();
+            var monthlySales = monthDays.Select(d =>
+            {
+                var dEnd = d.AddDays(1);
+                return sales.Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd).Sum(s => s.Total);
+            }).ToList();
+
+            // WEEKLY BAR (days of current week Mon..Sun)
+            // We need sales for week; since we already filtered by month, week might cross month boundary.
+            // So fetch week sales separately (safe and simple).
+            var weekSalesData = await _db.Sales.AsNoTracking()
+                .Where(s => s.StationId == stationId && s.CreatedAt >= weekStart && s.CreatedAt < weekEnd)
+                .ToListAsync();
+
+            var weekDays = Enumerable.Range(0, 7).Select(i => weekStart.AddDays(i)).ToList();
+            var weeklyLabels = weekDays.Select(d => d.ToString("ddd")).ToList(); // Mon Tue Wed...
+            var weeklySales = weekDays.Select(d =>
+            {
+                var dEnd = d.AddDays(1);
+                return weekSalesData.Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd).Sum(s => s.Total);
+            }).ToList();
+
+            var vm = new DashboardVm
+            {
+                StationName = station.Name,
+
+                TodaySales = todaySales,                 // ADD this property in VM
+                LpgKgSoldThisMonth = lpgKgSoldThisMonth,
+                ActiveBatchRemainingKg = remainingKg,
+
+                MonthlyLabels = monthlyLabels,
+                MonthlySales = monthlySales,
+
+                WeeklyLabels = weeklyLabels,
+                WeeklySales = weeklySales
+            };
+
+            return View(vm);
+        }
+
+    }
+}

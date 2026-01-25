@@ -57,4 +57,12 @@ public class DailyClose
     public string? ModifiedBySuperAdminId { get; set; }
     public DateTime? ModifiedAtUtc { get; set; }
     public string? ModificationReason { get; set; }
+
+    public decimal CreditIssuedTotal { get; set; }          // total value of credit sales created today
+    public decimal CreditCollectedTotal { get; set; }       // total repayments received today
+
+    public decimal CreditCollectedCash { get; set; }
+    public decimal CreditCollectedPos { get; set; }
+    public decimal CreditCollectedTransfer { get; set; }
+
 }

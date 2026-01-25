@@ -109,6 +109,21 @@ namespace MacharPos.Web.Migrations
                     b.Property<string>("ClosedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<decimal>("CreditCollectedCash")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CreditCollectedPos")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CreditCollectedTotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CreditCollectedTransfer")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CreditIssuedTotal")
+                        .HasColumnType("numeric");
+
                     b.Property<bool>("IsClosed")
                         .HasColumnType("boolean");
 

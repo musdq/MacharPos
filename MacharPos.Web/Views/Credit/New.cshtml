@@ -76,7 +76,7 @@
                 </select>
               </td>
               <td>
-                <input class="form-control" name="Lines[@i].Qty" type="number" step="0.01" value="1" oninput="calcTotals()" />
+                <input class="form-control" name="Lines[@i].Qty" type="number" step="1" value="1" oninput="calcTotals()" />
               </td>
               <td>
                 <input class="form-control unitPrice" type="number" step="0.01" value="0" readonly />
@@ -141,7 +141,7 @@
           ${getProductsOptionsHtml()}
         </select>
       </td>
-      <td><input class="form-control" name="Lines[${idx}].Qty" type="number" step="0.01" value="1" oninput="calcTotals()" /></td>
+      <td><input class="form-control" name="Lines[${idx}].Qty" type="number" step="1" value="1" oninput="calcTotals()" /></td>
       <td><input class="form-control unitPrice" type="number" step="0.01" value="0" readonly /></td>
       <td class="text-end"><span class="lineTotal">0.00</span></td>
       <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button></td>

@@ -24,4 +24,11 @@ public class DailyCloseVm
 
     // Super-admin edit
     public string? ModificationReason { get; set; }
+
+    public decimal LiveCreditIssuedTotal { get; set; }
+    public decimal LiveCreditCollectedTotal { get; set; }
+    public decimal LiveCreditCollectedCash { get; set; }
+    public decimal LiveCreditCollectedPos { get; set; }
+    public decimal LiveCreditCollectedTransfer { get; set; }
+
 }

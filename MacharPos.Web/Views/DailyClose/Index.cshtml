@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "Daily Close";
     var isClosed = Model.Existing?.IsClosed ?? false;
+    var hasTankClosing = Model.Existing?.TankClosingKg.HasValue ?? false;
 }
 
 <div class="no-print d-flex align-items-center justify-content-between mb-3">
@@ -62,7 +63,6 @@
                 }
                 else
                 {
-
                     <span class="badge text-bg-warning">Open</span>
                 }
             </div>
@@ -104,6 +104,31 @@
                     <hr />
                     <div class="d-flex justify-content-between"><div>Total LPG Sold</div><div class="fw-semibold">@Model.LiveTotalLpgKg.ToString("N2") kg</div></div>
                     <div class="d-flex justify-content-between"><div>Active Batch Remaining</div><div class="fw-semibold">@Model.LiveActiveBatchRemainingKg.ToString("N2") kg</div></div>
+
+                    <!-- NEW: LIVE TANK SCALE RECON (no-print preview) -->
+                    <hr />
+                    <div class="text-secondary small">LPG TANK SCALE (preview)</div>
+                    <div class="d-flex justify-content-between mt-2">
+                        <div>Opening (from last close)</div>
+                        <div class="fw-semibold">@Model.LiveTankOpeningKg.ToString("N2") kg</div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <div>Receipts Today</div>
+                        <div class="fw-semibold">@((Model.TankReceiptsKg ?? 0m).ToString("N2")) kg</div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <div>Closing (entered)</div>
+                        <div class="fw-semibold">@((Model.TankClosingKg ?? 0m).ToString("N2")) kg</div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <div>Scale Sold</div>
+                        <div class="fw-semibold">@Model.LiveTankScaleSoldKg.ToString("N2") kg</div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <div>Variance (Scale - App)</div>
+                        <div class="fw-semibold">@Model.LiveTankVarianceKg.ToString("N2") kg</div>
+                    </div>
+                    <div class="form-text">Variance helps spot missing sales, scale drift, or posting errors.</div>
                 </div>
             </div>
 
@@ -140,6 +165,33 @@
                         <hr />
                         <div class="d-flex justify-content-between"><div>Total LPG Sold</div><div class="fw-semibold">@Model.Existing.TotalLpgKg.ToString("N2") kg</div></div>
                         <div class="d-flex justify-content-between"><div>Active Batch Remaining</div><div class="fw-semibold">@Model.Existing.ActiveBatchRemainingKg.ToString("N2") kg</div></div>
+
+                        <!-- NEW: SAVED TANK SCALE RECON -->
+                        @if (Model.Existing.TankClosingKg.HasValue)
+                        {
+                            <hr />
+                            <div class="text-secondary small">LPG TANK SCALE (saved)</div>
+                            <div class="d-flex justify-content-between mt-2">
+                                <div>Opening</div>
+                                <div class="fw-semibold">@((Model.Existing.TankOpeningKg ?? 0m).ToString("N2")) kg</div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <div>Receipts</div>
+                                <div class="fw-semibold">@Model.Existing.TankReceiptsKg?.ToString("N2") kg</div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <div>Closing</div>
+                                <div class="fw-semibold">@Model.Existing.TankClosingKg.Value.ToString("N2") kg</div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <div>Scale Sold</div>
+                                <div class="fw-semibold">@((Model.Existing.TankScaleSoldKg ?? 0m).ToString("N2")) kg</div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <div>Variance (Scale - App)</div>
+                                <div class="fw-semibold">@((Model.Existing.TankVarianceKg ?? 0m).ToString("N2")) kg</div>
+                            </div>
+                        }
 
                         @if (Model.Existing.CashCounted.HasValue)
                         {
@@ -178,6 +230,32 @@
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="closeDate" value="@Model.CloseDate.ToString("yyyy-MM-dd")" />
 
+                        <!-- NEW: Tank scale inputs -->
+                        <div class="col-12">
+                            <div class="border rounded p-3 bg-light">
+                                <div class="fw-semibold">LPG Tank Scale</div>
+                                <div class="small text-secondary">Enter today’s closing tank scale (kg). Opening is auto from last closed day.</div>
+
+                                <div class="row g-2 mt-1">
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label">Opening (auto)</label>
+                                        <input class="form-control" value="@Model.LiveTankOpeningKg.ToString("N2")" readonly />
+                                    </div>
+
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label">Receipts Today (kg) (optional)</label>
+                                        <input class="form-control" type="number" step="0.01" name="tankReceiptsKg" value="@(Model.TankReceiptsKg?.ToString() ?? "")" />
+                                    </div>
+
+                                    <div class="col-12 col-md-4">
+                                        <label class="form-label">Closing Tank Scale (kg) <span class="text-danger">*</span></label>
+                                        <input class="form-control" type="number" step="0.01" name="tankClosingKg" value="@(Model.TankClosingKg?.ToString() ?? "")" required />
+                                        <div class="form-text">Required to close the day.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="col-12 col-md-4">
                             <label class="form-label">Cash Counted (optional)</label>
                             <input class="form-control" type="number" step="0.01" name="cashCounted" value="@(Model.CashCounted?.ToString() ?? "")" />
@@ -193,6 +271,47 @@
                             <div class="form-text">Locks the day. Only SuperAdmin can change it later.</div>
                         </div>
                     </form>
+
+                    <!-- OPTIONAL: Last 14 days history table (still same screen) -->
+                    @if (Model.TankHistory?.Any() == true)
+                    {
+                        <hr />
+                        <div class="border rounded p-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="fw-semibold">Tank vs App History (Last @Model.TankHistory.Count days)</div>
+                            </div>
+                            <div class="table-responsive mt-2">
+                                <table class="table table-sm table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th class="text-end">Opening</th>
+                                            <th class="text-end">Receipts</th>
+                                            <th class="text-end">Closing</th>
+                                            <th class="text-end">App Sold</th>
+                                            <th class="text-end">Scale Sold</th>
+                                            <th class="text-end">Variance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var r in Model.TankHistory)
+                                        {
+                                            <tr>
+                                                <td>@r.CloseDate.ToString("yyyy-MM-dd")</td>
+                                                <td class="text-end">@((r.OpeningKg ?? 0m).ToString("N2"))</td>
+                                                <td class="text-end">@r.ReceiptsKg.ToString("N2")</td>
+                                                <td class="text-end">@((r.ClosingKg ?? 0m).ToString("N2"))</td>
+                                                <td class="text-end">@r.AppSoldKg.ToString("N2")</td>
+                                                <td class="text-end">@((r.ScaleSoldKg ?? 0m).ToString("N2"))</td>
+                                                <td class="text-end">@((r.VarianceKg ?? 0m).ToString("N2"))</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="form-text">Variance = Scale Sold − App Sold.</div>
+                        </div>
+                    }
                 }
                 else
                 {
@@ -225,6 +344,25 @@
                             <label class="form-label">Notes (optional)</label>
                             <input class="form-control" name="notes" />
                         </div>
+
+                        <!-- OPTIONAL: allow SuperAdmin to adjust tank values -->
+                        <div class="col-12">
+                            <div class="border rounded p-3 bg-light">
+                                <div class="fw-semibold">LPG Tank Scale (optional)</div>
+                                <div class="small text-secondary">Leave blank to keep current tank values. Enter closing to update tank reconciliation.</div>
+
+                                <div class="row g-2 mt-1">
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Receipts Today (kg) (optional)</label>
+                                        <input class="form-control" type="number" step="0.01" name="tankReceiptsKg" />
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label class="form-label">Closing Tank Scale (kg) (optional)</label>
+                                        <input class="form-control" type="number" step="0.01" name="tankClosingKg" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </form>
                 }
                 else
@@ -238,18 +376,16 @@
 
 <style>
     @@media print {
-        .no-print
+        .no-print {
+            display: none !important;
+        }
 
-    {
-        display: none !important;
+        body {
+            margin: 0;
+        }
+
+        .card {
+            box-shadow: none !important;
+        }
     }
-
-    body {
-        margin: 0;
-    }
-
-    .card {
-        box-shadow: none !important;
-    }
-
-    }</style>
+</style>

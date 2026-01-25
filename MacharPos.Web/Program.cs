@@ -26,7 +26,7 @@ if (string.IsNullOrWhiteSpace(cs))
 
 cs = cs.Trim().Trim('"');
 
-Console.WriteLine("[DB] Raw prefix: " + (cs.Length > 30 ? cs.Substring(0, 30) : cs));
+//Console.WriteLine("[DB] Raw prefix: " + (cs.Length > 30 ? cs.Substring(0, 30) : cs));
 
 string npgsqlConnString;
 

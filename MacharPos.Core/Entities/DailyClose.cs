@@ -65,4 +65,21 @@ public class DailyClose
     public decimal CreditCollectedPos { get; set; }
     public decimal CreditCollectedTransfer { get; set; }
 
+    // LPG Tank Scale Reconciliation (optional but recommended)
+    [Column(TypeName = "numeric(18,2)")]
+    public decimal? TankOpeningKg { get; set; }      // yesterday closing (auto-filled)
+
+    [Column(TypeName = "numeric(18,2)")]
+    public decimal? TankReceiptsKg { get; set; }     // optional, default 0
+
+    [Column(TypeName = "numeric(18,2)")]
+    public decimal? TankClosingKg { get; set; }      // REQUIRED when closing day
+
+    [Column(TypeName = "numeric(18,2)")]
+    public decimal? TankScaleSoldKg { get; set; }    // (opening + receipts) - closing
+
+    [Column(TypeName = "numeric(18,2)")]
+    public decimal? TankVarianceKg { get; set; }     // TankScaleSoldKg - TotalLpgKg (app sold)
+
+
 }

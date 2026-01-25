@@ -145,6 +145,21 @@ namespace MacharPos.Web.Migrations
                     b.Property<Guid>("StationId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("TankClosingKg")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("TankOpeningKg")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("TankReceiptsKg")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("TankScaleSoldKg")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("TankVarianceKg")
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<decimal>("TotalLpgKg")
                         .HasColumnType("numeric(18,2)");
 

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace MacharPos.Web.Controllers;
 
@@ -112,6 +113,23 @@ public class DailyCloseController : Controller
         );
     }
 
+    /// <summary>
+    /// Returns the most recent tank closing kg prior to closeDate (same station).
+    /// If none exists, returns 0.
+    /// </summary>
+    private async Task<decimal> GetTankOpeningKgAsync(Guid stationId, DateTime closeDate)
+    {
+        var prev = await _db.DailyCloses.AsNoTracking()
+            .Where(x => x.StationId == stationId
+                        && x.CloseDate < closeDate
+                        && x.TankClosingKg != null)
+            .OrderByDescending(x => x.CloseDate)
+            .Select(x => x.TankClosingKg!.Value)
+            .FirstOrDefaultAsync();
+
+        return prev; // default 0 if none
+    }
+
     [HttpGet]
     public async Task<IActionResult> Index(DateTime? date = null)
     {
@@ -125,6 +143,33 @@ public class DailyCloseController : Controller
             .FirstOrDefaultAsync(x => x.StationId == stationId && x.CloseDate == closeDate);
 
         var stats = await ComputeStatsAsync(stationId, closeDate);
+
+        // Tank opening = yesterday closing (if any), unless this day already has stored opening
+        var inferredOpening = await GetTankOpeningKgAsync(stationId, closeDate);
+        var openingKg = existing?.TankOpeningKg ?? inferredOpening;
+        var receiptsKg = existing?.TankReceiptsKg ?? 0m;
+        var closingKg = existing?.TankClosingKg; // may be null if not set yet
+
+        // Live preview values
+        decimal? liveScaleSold = closingKg.HasValue ? (openingKg + receiptsKg) - closingKg.Value : (decimal?)null;
+        decimal? liveVariance = liveScaleSold.HasValue ? liveScaleSold.Value - stats.TotalLpgKg : (decimal?)null;
+
+        // OPTIONAL: history for last 14 days (shown inside the same Daily Close page)
+        // If your VM doesn't have these fields yet, remove this block + the assignments below.
+        var history = await _db.DailyCloses.AsNoTracking()
+            .Where(x => x.StationId == stationId && x.CloseDate <= closeDate)
+            .OrderByDescending(x => x.CloseDate)
+            .Take(14)
+            .Select(x => new DailyCloseVm.TankHistoryRowVm(
+                x.CloseDate,
+                x.TankOpeningKg,
+                (decimal)x.TankReceiptsKg,
+                x.TankClosingKg,
+                x.TotalLpgKg,
+                x.TankScaleSoldKg,
+                x.TankVarianceKg
+            ))
+            .ToListAsync();
 
         var vm = new DailyCloseVm
         {
@@ -140,7 +185,7 @@ public class DailyCloseController : Controller
             LiveTotalLpgKg = stats.TotalLpgKg,
             LiveActiveBatchRemainingKg = stats.ActiveBatchRemainingKg,
 
-            // v2 credit live fields (add these properties in VM)
+            // v2 credit live fields
             LiveCreditIssuedTotal = stats.CreditIssuedTotal,
             LiveCreditCollectedTotal = stats.CreditCollectedTotal,
             LiveCreditCollectedCash = stats.CreditCollectedCash,
@@ -148,7 +193,19 @@ public class DailyCloseController : Controller
             LiveCreditCollectedTransfer = stats.CreditCollectedTransfer,
 
             CashCounted = existing?.CashCounted,
-            Notes = existing?.Notes
+            Notes = existing?.Notes,
+
+            // Tank inputs (bind in the form)
+            TankClosingKg = existing?.TankClosingKg,
+            TankReceiptsKg = existing is null ? null : existing.TankReceiptsKg, // show null if new record (optional)
+
+            // Tank live preview
+            LiveTankOpeningKg = openingKg,
+            LiveTankScaleSoldKg = liveScaleSold ?? 0m,     // if you prefer, keep nullable in VM instead
+            LiveTankVarianceKg = liveVariance ?? 0m,       // if you prefer, keep nullable in VM instead
+
+            // Optional history (requires VM support)
+            TankHistory = history
         };
 
         return View(vm);
@@ -157,7 +214,13 @@ public class DailyCloseController : Controller
     [HttpPost]
     [Authorize(Roles = "StationManager,Admin")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CloseDay(DateTime closeDate, decimal? cashCounted, string? notes)
+    public async Task<IActionResult> CloseDay(
+        DateTime closeDate,
+        decimal? cashCounted,
+        string? notes,
+        decimal? tankClosingKg,
+        decimal? tankReceiptsKg
+    )
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
         var user = await _users.GetUserAsync(User);
@@ -169,6 +232,13 @@ public class DailyCloseController : Controller
         if (existing is not null && existing.IsClosed)
         {
             TempData["Err"] = "This day is already closed. Only SuperAdmin can modify after close.";
+            return RedirectToAction(nameof(Index), new { date = closeDate.ToString("yyyy-MM-dd") });
+        }
+
+        // Enforce tank closing KG for closure (simple reconciliation requirement)
+        if (!tankClosingKg.HasValue)
+        {
+            TempData["Err"] = "Tank scale closing (kg) is required to close the day.";
             return RedirectToAction(nameof(Index), new { date = closeDate.ToString("yyyy-MM-dd") });
         }
 
@@ -198,7 +268,7 @@ public class DailyCloseController : Controller
         existing.TotalLpgKg = stats.TotalLpgKg;
         existing.ActiveBatchRemainingKg = stats.ActiveBatchRemainingKg;
 
-        // credit v2 snapshot (add these fields on DailyClose entity)
+        // credit v2 snapshot
         existing.CreditIssuedTotal = stats.CreditIssuedTotal;
         existing.CreditCollectedTotal = stats.CreditCollectedTotal;
         existing.CreditCollectedCash = stats.CreditCollectedCash;
@@ -208,6 +278,18 @@ public class DailyCloseController : Controller
         existing.CashCounted = cashCounted;
         existing.CashVariance = variance;
         existing.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+
+        // Tank reconciliation snapshot
+        var openingKg = existing.TankOpeningKg ?? await GetTankOpeningKgAsync(stationId, closeDate);
+        var receiptsKg = tankReceiptsKg ?? existing.TankReceiptsKg; // keep previous if not provided
+        if (receiptsKg < 0) receiptsKg = 0m;
+
+        existing.TankOpeningKg = openingKg;
+        existing.TankReceiptsKg = receiptsKg;
+        existing.TankClosingKg = tankClosingKg.Value;
+
+        existing.TankScaleSoldKg = (openingKg + receiptsKg) - tankClosingKg.Value;
+        existing.TankVarianceKg = existing.TankScaleSoldKg - stats.TotalLpgKg;
 
         existing.IsClosed = true;
         existing.ClosedByUserId = user.Id;
@@ -222,7 +304,14 @@ public class DailyCloseController : Controller
     [HttpPost]
     [Authorize(Roles = "SuperAdmin")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SuperRecalculate(DateTime closeDate, string reason, decimal? cashCounted = null, string? notes = null)
+    public async Task<IActionResult> SuperRecalculate(
+        DateTime closeDate,
+        string reason,
+        decimal? cashCounted = null,
+        string? notes = null,
+        decimal? tankClosingKg = null,
+        decimal? tankReceiptsKg = null
+    )
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
         var user = await _users.GetUserAsync(User);
@@ -265,6 +354,29 @@ public class DailyCloseController : Controller
         if (!string.IsNullOrWhiteSpace(notes)) dc.Notes = notes.Trim();
 
         dc.CashVariance = dc.CashCounted.HasValue ? (dc.CashCounted.Value - dc.CashTotal) : (decimal?)null;
+
+        // Tank: only change if SuperAdmin provided new inputs; otherwise just re-derive variance vs updated app sold
+        if (tankClosingKg.HasValue)
+        {
+            var openingKg = dc.TankOpeningKg ?? await GetTankOpeningKgAsync(stationId, closeDate);
+            var receiptsKg = tankReceiptsKg ?? dc.TankReceiptsKg;
+            if (receiptsKg < 0) receiptsKg = 0m;
+
+            dc.TankOpeningKg = openingKg;
+            dc.TankReceiptsKg = receiptsKg;
+            dc.TankClosingKg = tankClosingKg.Value;
+
+            dc.TankScaleSoldKg = (openingKg + receiptsKg) - tankClosingKg.Value;
+            dc.TankVarianceKg = dc.TankScaleSoldKg - stats.TotalLpgKg;
+        }
+        else if (dc.TankClosingKg.HasValue)
+        {
+            var openingKg = dc.TankOpeningKg ?? 0m;
+            var receiptsKg = dc.TankReceiptsKg;
+
+            dc.TankScaleSoldKg = (openingKg + receiptsKg) - dc.TankClosingKg.Value;
+            dc.TankVarianceKg = dc.TankScaleSoldKg - stats.TotalLpgKg;
+        }
 
         dc.ModifiedBySuperAdminId = user.Id;
         dc.ModifiedAtUtc = DateTime.UtcNow;

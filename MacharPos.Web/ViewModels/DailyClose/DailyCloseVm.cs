@@ -31,4 +31,25 @@ public class DailyCloseVm
     public decimal LiveCreditCollectedPos { get; set; }
     public decimal LiveCreditCollectedTransfer { get; set; }
 
+    // Inputs (Tank scale)
+    public decimal? TankClosingKg { get; set; }
+    public decimal? TankReceiptsKg { get; set; } // optional
+
+    // Live preview (computed)
+    public decimal LiveTankOpeningKg { get; set; }
+    public decimal LiveTankScaleSoldKg { get; set; }
+    public decimal LiveTankVarianceKg { get; set; }
+
+    // Optional: history rows shown inside same page
+    public List<TankHistoryRowVm> TankHistory { get; set; } = new();
+    public sealed record TankHistoryRowVm(
+        DateTime CloseDate,
+        decimal? OpeningKg,
+        decimal ReceiptsKg,
+        decimal? ClosingKg,
+        decimal AppSoldKg,
+        decimal? ScaleSoldKg,
+        decimal? VarianceKg
+    );
+
 }

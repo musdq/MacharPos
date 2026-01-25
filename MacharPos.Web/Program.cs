@@ -13,29 +13,27 @@ builder.Services.AddControllersWithViews();
 // Database connection
 // --------------------
 // 1) Prefer standard connection string name: DefaultConnection
-var cs = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// 2) Fallback to Railway DATABASE_URL (postgresql://...)
+string? cs = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+// fallback to local appsettings for dev
 if (string.IsNullOrWhiteSpace(cs))
-    cs = Environment.GetEnvironmentVariable("DATABASE_URL");
+    cs = builder.Configuration.GetConnectionString("DefaultConnection");
 
 if (string.IsNullOrWhiteSpace(cs))
-    throw new Exception("Database connection string not configured. Set ConnectionStrings:DefaultConnection or DATABASE_URL.");
+    throw new Exception("No DB connection configured.");
 
 if (cs.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase))
     cs = cs.Replace("postgres://", "postgresql://");
 
-// Build Npgsql conn string (add SSL-safe defaults)
 var npgsql = new NpgsqlConnectionStringBuilder(cs)
 {
-    // Railway internal host usually works without SSL, but Prefer is safe.
-    // If you ever see SSL errors, change Prefer -> Require.
+    // internal Railway host is fine; prefer SSL-safe default
     SslMode = SslMode.Prefer,
     TrustServerCertificate = true
 }.ToString();
-
-builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseNpgsql(npgsql));
+Console.WriteLine("DB=" + new NpgsqlConnectionStringBuilder(npgsql).Host);
+builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(npgsql));
 
 // --------------------
 // Identity

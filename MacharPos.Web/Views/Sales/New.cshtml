@@ -6,10 +6,27 @@
     var productPrices = (Dictionary<string, decimal>)ViewBag.ProductPrices;
 }
 
+<!-- Tom Select (searchable dropdown) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" />
+
 <div class="d-flex align-items-center justify-content-between mb-3">
   <h1 class="h5 mb-0">New Sale</h1>
   <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
 </div>
+
+
+@if (ViewBag.UnclosedDate is string unclosed && ViewBag.UnclosedDateDisplay is string unclosedDisplay)
+{
+  <div class="alert alert-warning d-flex align-items-start justify-content-between gap-3">
+    <div>
+      <div class="fw-semibold">Previous day not closed</div>
+      <div class="small text-muted">Please close <span class="fw-semibold">@unclosedDisplay</span> to keep reconciliation accurate.</div>
+    </div>
+    <a class="btn btn-sm btn-outline-dark" href="/DailyClose?date=@unclosed">Go to Daily Close</a>
+  </div>
+}
+
+
 
 @if (!ViewData.ModelState.IsValid)
 {
@@ -72,7 +89,7 @@
             <tr>
               <th style="min-width:260px;">Product</th>
               <th style="width:110px;">Qty</th>
-              <th style="width:160px;">Unit Price</th>
+              <th style="width:220px;">Unit Price</th>
               <th class="text-end" style="width:160px;">Line Total</th>
               <th style="width:50px;"></th>
             </tr>
@@ -82,7 +99,7 @@
           {
             <tr>
               <td>
-                <select class="form-select" name="Lines[@i].ProductId" onchange="onProductChange(this)">
+                <select class="form-select product-select" name="Lines[@i].ProductId" onchange="onProductChange(this)">
                   <option value="">Select...</option>
                   @foreach (var p in Model.Products)
                   {
@@ -92,10 +109,13 @@
                 </select>
               </td>
               <td>
-                <input class="form-control" name="Lines[@i].Qty" type="number" step="1" value="1" oninput="calcTotals()" />
+                <input class="form-control qty-input" name="Lines[@i].Qty" type="number" step="1" value="1" oninput="calcTotals()" />
               </td>
               <td>
-                <input class="form-control" name="Lines[@i].UnitPrice" type="number" value="0" readonly />
+                <input class="form-control price-input" name="Lines[@i].UnitPrice" type="number" value="0" readonly />
+                <div class="form-text mt-1">
+                  <a href="#" class="text-decoration-none" onclick="return togglePriceOverride(this)">Override</a>
+                </div>
               </td>
               <td class="text-end">
                 <span class="lineTotal">0.00</span>
@@ -121,7 +141,10 @@
 </div>
 
 @section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script>
+  // --- Tom Select init (searchable dropdowns) ---
+
   function addLine() {
     const tbody = document.querySelector("#linesTable tbody");
     const idx = tbody.querySelectorAll("tr").length;
@@ -129,18 +152,25 @@
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>
-          <select class="form-select" name="Lines[${idx}].ProductId" onchange="onProductChange(this)">
+          <select class="form-select product-select" name="Lines[${idx}].ProductId" onchange="onProductChange(this)">
           <option value="">Select...</option>
           ${getProductsOptionsHtml()}
         </select>
       </td>
-      <td><input class="form-control" name="Lines[${idx}].Qty" type="number" step="1" value="1" oninput="calcTotals()" /></td>
-            <td><input class="form-control" name="Lines[${idx}].UnitPrice" type="number" value="0" oninput="calcTotals()" readonly /></td>
+      <td><input class="form-control qty-input" name="Lines[${idx}].Qty" type="number" step="1" value="1" oninput="calcTotals()" /></td>
+      <td>
+        <input class="form-control price-input" name="Lines[${idx}].UnitPrice" type="number" value="0" readonly />
+        <div class="form-text mt-1">
+          <a href="#" class="text-decoration-none" onclick="return togglePriceOverride(this)">Override</a>
+        </div>
+      </td>
       <td class="text-end"><span class="lineTotal">0.00</span></td>
       <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button></td>
     `;
     tbody.appendChild(row);
+    enhanceRow(row);
     calcTotals();
+    focusProductOnRow(row);
   }
 
   function removeLine(btn) {
@@ -180,15 +210,91 @@
           const row = sel.closest("tr");
           row.querySelector('input[name$=".UnitPrice"]').value = price.toFixed(2);
           calcTotals();
+          focusQtyOnRow(row);
         }
+
+  // --- Price override (requires Manager auth fields) ---
+  function togglePriceOverride(anchor) {
+    const row = anchor.closest("tr");
+    const priceInput = row.querySelector('input[name$=".UnitPrice"]');
+    const isReadonly = priceInput.hasAttribute("readonly");
+
+    if (isReadonly) {
+      priceInput.removeAttribute("readonly");
+      priceInput.classList.add("border-warning");
+      anchor.textContent = "Lock";
+      // Any override should trigger manager auth UI
+      forceManagerAuthOn();
+      // Focus price for quick editing
+      setTimeout(() => priceInput.focus(), 0);
+    } else {
+      priceInput.setAttribute("readonly", "readonly");
+      priceInput.classList.remove("border-warning");
+      anchor.textContent = "Override";
+    }
+
+    toggleManagerAuth();
+    return false;
+  }
 
   function toggleManagerAuth(){
           const disc = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
-          const show = disc > 0;
+          const show = disc > 0 || hasAnyPriceOverride();
           document.getElementById("mgrEmailWrap").style.display = show ? "" : "none";
           document.getElementById("mgrPassWrap").style.display = show ? "" : "none";
+          setManagerFieldsRequired(show);
         }
         toggleManagerAuth();
+
+  function forceManagerAuthOn() {
+    // If discount is 0 but we need auth for overrides, just show fields.
+    document.getElementById("mgrEmailWrap").style.display = "";
+    document.getElementById("mgrPassWrap").style.display = "";
+  }
+
+  function hasAnyPriceOverride() {
+    // We consider price overridden if input is not readonly.
+    return Array.from(document.querySelectorAll('#linesTable tbody tr input[name$=".UnitPrice"]'))
+      .some(i => !i.hasAttribute('readonly'));
+  }
+
+
+  function requiresManagerAuth() {
+    const disc = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
+    return disc > 0 || hasAnyPriceOverride();
+  }
+
+  function setManagerFieldsRequired(isRequired) {
+    const email = document.querySelector('[name="ManagerEmail"]');
+    const pass = document.querySelector('[name="ManagerPassword"]');
+    if (email) email.required = isRequired;
+    if (pass) pass.required = isRequired;
+  }
+
+  function validateManagerAuthBeforeSubmit(e) {
+    if (!requiresManagerAuth()) {
+      setManagerFieldsRequired(false);
+      return true;
+    }
+
+    // Ensure fields are visible + required
+    forceManagerAuthOn();
+    setManagerFieldsRequired(true);
+
+    const emailVal = (document.querySelector('[name="ManagerEmail"]')?.value || "").trim();
+    const passVal  = (document.querySelector('[name="ManagerPassword"]')?.value || "").trim();
+
+    if (!emailVal || !passVal) {
+      e?.preventDefault?.();
+      alert("Manager approval is required (email + password) for discount or price override.");
+      // Focus first missing field
+      if (!emailVal) document.querySelector('[name="ManagerEmail"]')?.focus();
+      else document.querySelector('[name="ManagerPassword"]')?.focus();
+      return false;
+    }
+
+    return true;
+  }
 
 
   // Build options from server-rendered list once
@@ -202,6 +308,73 @@
     return opts.join("");
   }
 
+  // --- Keyboard flow / UX ---
+  function enhanceRow(row) {
+    // TomSelect on product dropdown
+    const sel = row.querySelector('select[name$=".ProductId"]');
+    if (sel && window.TomSelect && !sel.tomselect) {
+      new TomSelect(sel, {
+        create: false,
+        allowEmptyOption: true,
+        placeholder: 'Select...',
+        dropdownParent: 'body'
+      });
+    }
+
+    // Enter on Qty -> add new line (if last row)
+    const qty = row.querySelector('input[name$=".Qty"]');
+    if (qty) {
+      qty.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const tbody = document.querySelector('#linesTable tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const isLast = rows.length && rows[rows.length - 1] === row;
+        if (isLast) {
+          addLine();
+        } else {
+          // Focus next row product
+          const next = rows[rows.indexOf(row) + 1];
+          if (next) focusProductOnRow(next);
+        }
+      });
+    }
+  }
+
+  function focusProductOnRow(row) {
+    const sel = row.querySelector('select[name$=".ProductId"]');
+    if (!sel) return;
+    // TomSelect focus if present
+    if (sel.tomselect) {
+      sel.tomselect.focus();
+    } else {
+      sel.focus();
+    }
+  }
+
+  function focusQtyOnRow(row) {
+    const qty = row.querySelector('input[name$=".Qty"]');
+    if (!qty) return;
+    setTimeout(() => {
+      qty.focus();
+      qty.select?.();
+    }, 0);
+  }
+
+  function enhanceAllRows() {
+    document.querySelectorAll('#linesTable tbody tr').forEach(enhanceRow);
+  }
+
+  // Auto-focus first product on load
+  document.addEventListener('DOMContentLoaded', () => {
+    enhanceAllRows();
+    const form = document.getElementById('saleForm');
+    if (form) form.addEventListener('submit', validateManagerAuthBeforeSubmit);
+
+    const firstRow = document.querySelector('#linesTable tbody tr');
+    if (firstRow) focusProductOnRow(firstRow);
+  });
+
   calcTotals();
-</script>
+ </script>
 }

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace MacharPos.Web.Controllers;
 
@@ -26,7 +27,18 @@ public class SalesController : Controller
         _stationCtx = stationCtx;
         _users = users;
         _signIn = signIn;
+    }
+    // Normalizes date for DATE column ("date") => Kind must NOT be Utc
+    private static DateTime AsDateOnly(DateTime dt)
+        => DateTime.SpecifyKind(dt.Date, DateTimeKind.Unspecified);
 
+    private static string MakeStationCode(string stationName)
+    {
+        if (string.IsNullOrWhiteSpace(stationName)) return "STN";
+        // Keep letters/numbers only, take first 3 chars
+        var cleaned = new string(stationName.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        if (cleaned.Length >= 3) return cleaned[..3];
+        return cleaned.PadRight(3, 'X');
     }
 
     [HttpGet]
@@ -99,6 +111,26 @@ public class SalesController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
+        // Phase 1 control: warn if previous business day wasn't closed
+        var yesterdayDateOnly = AsDateOnly(DateTime.Today.AddDays(-1));
+
+        // Only warn if this station has any prior activity (sales before today or any older daily close)
+        var hasPriorActivity = await _db.Sales.AsNoTracking()
+            .AnyAsync(s => s.StationId == stationId && s.CreatedAt < DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
+
+        if (hasPriorActivity)
+        {
+            var yesterdayClosed = await _db.DailyCloses.AsNoTracking()
+                .AnyAsync(x => x.StationId == stationId && x.CloseDate == yesterdayDateOnly && x.IsClosed);
+
+            if (!yesterdayClosed)
+            {
+                ViewBag.UnclosedDate = yesterdayDateOnly.ToString("yyyy-MM-dd");
+                ViewBag.UnclosedDateDisplay = yesterdayDateOnly.ToString("ddd, dd MMM yyyy");
+            }
+        }
+
+
         // Customers for station, default Walk-in
         var customers = await _db.Customers.AsNoTracking()
             .Where(c => c.StationId == stationId && c.IsActive)
@@ -152,6 +184,7 @@ public class SalesController : Controller
         vm.Customers = customers.Select(c => new SelectListItem(c.Name, c.Id.ToString(), c.Id == vm.CustomerId)).ToList();
         vm.Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList();
         vm.PaymentMethods = Enum.GetValues<PaymentMethod>()
+            .Where(pm => pm != PaymentMethod.Credit)
             .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == vm.PaymentMethod))
             .ToList();
 
@@ -170,7 +203,23 @@ public class SalesController : Controller
         var productIds = vm.Lines.Select(l => l.ProductId).Distinct().ToList();
         var prodMap = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
 
-        // Find active LPG batch if needed
+        
+        // Detect any price overrides (client can post UnitPrice if the UI unlocked it)
+        // If any line UnitPrice differs from the product's default price, we require manager authorization.
+        bool hasPriceOverride = false;
+        foreach (var l in vm.Lines)
+        {
+            if (!prodMap.TryGetValue(l.ProductId, out var p)) continue;
+
+            // Treat empty/zero as "use default"
+            if (l.UnitPrice > 0m && l.UnitPrice != p.DefaultUnitPrice)
+            {
+                hasPriceOverride = true;
+                break;
+            }
+        }
+
+// Find active LPG batch if needed
         var needsLpgBatch = vm.Lines.Any(l => prodMap.TryGetValue(l.ProductId, out var p) && (p.EquivalentKg ?? 0m) > 0m);
         LpgBatch? activeBatch = null;
         if (needsLpgBatch)
@@ -183,7 +232,22 @@ public class SalesController : Controller
             }
         }
 
-        // Build sale + items
+        
+        // Receipt numbering: STN-YYYYMMDD-000001 (sequence per station per day)
+        var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
+        var stationCode = MakeStationCode(station.Name);
+
+        var utcDayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
+        var utcDayEnd = utcDayStart.AddDays(1);
+
+        var todayCount = await _db.Sales.AsNoTracking()
+            .Where(s => s.StationId == stationId && s.CreatedAt >= utcDayStart && s.CreatedAt < utcDayEnd)
+            .CountAsync();
+
+        var receiptSeq = todayCount + 1;
+        var receiptNo = $"{stationCode}-{DateTime.UtcNow:yyyyMMdd}-{receiptSeq:000000}";
+
+// Build sale + items
         var sale = new Sale
         {
             StationId = stationId,
@@ -191,7 +255,7 @@ public class SalesController : Controller
             SoldByUserId = user.Id,
             PaymentMethod = vm.PaymentMethod,
             CreatedAt = DateTime.UtcNow,
-            ReceiptNo = $"RCPT-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}"
+            ReceiptNo = receiptNo
         };
 
         decimal subtotal = 0m;
@@ -204,6 +268,10 @@ public class SalesController : Controller
 
             var qty = line.Qty;
             var unitPrice = p.DefaultUnitPrice;
+            // Apply price override only if one was posted and manager approval passed (validated above)
+            if (line.UnitPrice > 0m && line.UnitPrice != p.DefaultUnitPrice)
+                unitPrice = line.UnitPrice;
+
             var lineTotal = qty * unitPrice;
 
             var item = new SaleItem
@@ -239,11 +307,11 @@ public class SalesController : Controller
 
         string? approvedByUserId = null;
 
-        if (discount > 0)
+        if (discount > 0 || hasPriceOverride)
         {
             if (string.IsNullOrWhiteSpace(vm.ManagerEmail) || string.IsNullOrWhiteSpace(vm.ManagerPassword))
             {
-                ModelState.AddModelError("", "Manager authorization is required for discount.");
+                ModelState.AddModelError("", "Manager authorization is required for discount or price override.");
                 return View(vm);
             }
 
@@ -275,7 +343,7 @@ public class SalesController : Controller
                 return View(vm);
             }
 
-            approvedByUserId = mgr.Id;
+            if (discount > 0) approvedByUserId = mgr.Id;
         }
 
 

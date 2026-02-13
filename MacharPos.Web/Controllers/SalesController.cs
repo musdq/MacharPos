@@ -121,7 +121,7 @@ public class SalesController : Controller
             CustomerId = walkin?.Id,
             Customers = customers.Select(c => new SelectListItem(c.Name, c.Id.ToString(), c.Id == walkin?.Id)).ToList(),
             Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList(),
-            PaymentMethods = Enum.GetValues<PaymentMethod>()
+            PaymentMethods = Enum.GetValues<PaymentMethod>().Where(pm => pm != PaymentMethod.Credit)
                 .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == PaymentMethod.Cash))
                 .ToList(),
             Lines = new List<SaleLineVm> { new SaleLineVm() }

@@ -135,7 +135,7 @@
         </select>
       </td>
       <td><input class="form-control" name="Lines[${idx}].Qty" type="number" step="1" value="1" oninput="calcTotals()" /></td>
-      <td><input class="form-control" name="Lines[${idx}].UnitPrice" type="number" value="0" oninput="calcTotals()" /></td>
+            <td><input class="form-control" name="Lines[${idx}].UnitPrice" type="number" value="0" oninput="calcTotals()" readonly /></td>
       <td class="text-end"><span class="lineTotal">0.00</span></td>
       <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button></td>
     `;
@@ -196,7 +196,8 @@
     const opts = [];
     @foreach (var p in Model.Products)
     {
-      <text>opts.push(`<option value="@p.Value">@p.Text</option>`);</text>
+                var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
+              <text>opts.push(`<option value="@p.Value" data-price="@price">@p.Text</option>`);</text>
     }
     return opts.join("");
   }

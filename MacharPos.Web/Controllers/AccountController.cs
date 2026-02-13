@@ -29,7 +29,7 @@ public class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Login(string email, string password, string? returnUrl = null)
     {
-        returnUrl ??= Url.Action("Index", "Home");
+        returnUrl ??= Url.Action("Index", "Dashboard");
 
         var user = await _userManager.FindByEmailAsync(email);
         if (user is null)

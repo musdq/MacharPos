@@ -24,6 +24,9 @@ namespace MacharPos.Web.Data
 
         public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
 
+        // Phase 2
+        public DbSet<ShiftClose> ShiftCloses => Set<ShiftClose>();
+
 
 
         protected override void OnModelCreating(ModelBuilder b)
@@ -53,6 +56,10 @@ namespace MacharPos.Web.Data
               .Property(x => x.CreatedAt)
               .HasColumnType("timestamp with time zone");
 
+            b.Entity<Sale>()
+              .Property(x => x.VoidedAtUtc)
+              .HasColumnType("timestamp with time zone");
+
             b.Entity<DailyClose>()
               .HasIndex(x => new { x.StationId, x.CloseDate })
               .IsUnique();
@@ -60,6 +67,21 @@ namespace MacharPos.Web.Data
             b.Entity<DailyClose>()
               .Property(x => x.CloseDate)
               .HasColumnType("date");
+
+            b.Entity<ShiftClose>()
+              .HasIndex(x => new { x.StationId, x.ShiftStartUtc });
+
+            b.Entity<ShiftClose>()
+              .Property(x => x.ShiftDate)
+              .HasColumnType("date");
+
+            b.Entity<ShiftClose>()
+              .Property(x => x.ShiftStartUtc)
+              .HasColumnType("timestamp with time zone");
+
+            b.Entity<ShiftClose>()
+              .Property(x => x.ShiftEndUtc)
+              .HasColumnType("timestamp with time zone");
 
             b.Entity<Sale>()
               .Property(x => x.CreditDueDate)

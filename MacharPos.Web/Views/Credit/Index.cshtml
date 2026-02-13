@@ -75,6 +75,7 @@
               </td>
               <td class="text-end">
                 <div class="d-flex justify-content-end gap-2">
+                  <a class="btn btn-outline-secondary btn-sm" asp-action="Customer" asp-route-id="@s.CustomerId">Statement</a>
                   <a class="btn btn-outline-secondary btn-sm" asp-action="Receipt" asp-route-id="@s.Id">Receipt</a>
                   @if ((User.IsInRole("Admin") || User.IsInRole("StationManager")) && s.CreditBalance > 0)
                   {

@@ -52,13 +52,17 @@ public class DailyCloseController : Controller
 
         var sales = await _db.Sales.AsNoTracking()
             .Include(s => s.Items)
-            .Where(s => s.StationId == stationId && s.CreatedAt >= utcStart && s.CreatedAt < utcEnd)
+            .Where(s => s.StationId == stationId
+                        && s.CreatedAt >= utcStart && s.CreatedAt < utcEnd
+                        && s.Status == SaleStatus.Completed)
             .ToListAsync();
 
         // Credit payments collected today
         var creditPayments = await _db.CreditPayments.AsNoTracking()
             .Include(p => p.Sale)
-            .Where(p => p.Sale!.StationId == stationId && p.ReceivedAtUtc >= utcStart && p.ReceivedAtUtc < utcEnd)
+            .Where(p => p.Sale!.StationId == stationId
+                        && p.Sale!.Status == SaleStatus.Completed
+                        && p.ReceivedAtUtc >= utcStart && p.ReceivedAtUtc < utcEnd)
             .ToListAsync();
 
         // Split sales: non-credit vs credit

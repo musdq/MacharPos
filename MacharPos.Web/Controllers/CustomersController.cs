@@ -67,7 +67,12 @@ public class CustomersController : Controller
             Name = vm.Name,
             Phone = vm.Phone,
             Address = vm.Address,
-            IsActive = vm.IsActive
+            IsActive = vm.IsActive,
+
+            // Phase 2: credit controls
+            IsCreditApproved = vm.IsCreditApproved,
+            CreditLimit = vm.CreditLimit,
+            CreditDueDays = vm.CreditDueDays
         };
 
         _db.Customers.Add(customer);
@@ -91,7 +96,11 @@ public class CustomersController : Controller
             Name = c.Name,
             Phone = c.Phone,
             Address = c.Address,
-            IsActive = c.IsActive
+            IsActive = c.IsActive,
+
+            IsCreditApproved = c.IsCreditApproved,
+            CreditLimit = c.CreditLimit,
+            CreditDueDays = c.CreditDueDays
         };
 
         return View(vm);
@@ -124,6 +133,11 @@ public class CustomersController : Controller
         c.Phone = vm.Phone;
         c.Address = vm.Address;
         c.IsActive = vm.IsActive;
+
+        // Phase 2: credit controls
+        c.IsCreditApproved = vm.IsCreditApproved;
+        c.CreditLimit = vm.CreditLimit;
+        c.CreditDueDays = vm.CreditDueDays;
 
         await _db.SaveChangesAsync();
 

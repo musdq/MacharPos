@@ -1,0 +1,69 @@
+@model MacharPos.Web.ViewModels.Credit.CustomerStatementVm
+
+@{
+    ViewData["Title"] = "Customer Statement";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h5 mb-0">Customer Statement</h1>
+    <div class="text-secondary small">@Model.CustomerName • As of @Model.AsOfUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+  </div>
+  <a class="btn btn-outline-secondary btn-sm" asp-action="Index" asp-route-customerId="@Model.CustomerId">Back</a>
+</div>
+
+<div class="row g-2 mb-2">
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm"><div class="card-body p-2">
+      <div class="text-secondary small">Total Debit (Sales)</div>
+      <div class="fw-semibold">₦@Model.TotalDebit.ToString("N2")</div>
+    </div></div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm"><div class="card-body p-2">
+      <div class="text-secondary small">Total Credit (Payments)</div>
+      <div class="fw-semibold">₦@Model.TotalCredit.ToString("N2")</div>
+    </div></div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card shadow-sm"><div class="card-body p-2">
+      <div class="text-secondary small">Balance</div>
+      <div class="fw-semibold">₦@Model.Balance.ToString("N2")</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th class="text-end">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var l in Model.Lines)
+          {
+            <tr>
+              <td>@l.DateUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+              <td>@l.Description</td>
+              <td class="text-end">
+                @if (l.Amount < 0)
+                {
+                  <span class="text-success">-₦@(-l.Amount).ToString("N2")</span>
+                }
+                else
+                {
+                  <span>₦@l.Amount.ToString("N2")</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

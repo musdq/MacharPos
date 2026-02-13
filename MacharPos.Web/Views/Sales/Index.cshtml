@@ -66,6 +66,7 @@
             <th>Receipt</th>
             <th>Customer</th>
             <th>Payment</th>
+            <th>Status</th>
             <th class="text-end">Total</th>
             <th class="text-end"></th>
           </tr>
@@ -78,9 +79,22 @@
               <td class="fw-semibold">@s.ReceiptNo</td>
               <td>@(s.Customer?.Name ?? "Walk-in")</td>
               <td>@s.PaymentMethod</td>
+              <td>
+                @if (s.Status == MacharPos.Core.Entities.SaleStatus.Voided)
+                {
+                  <span class="badge text-bg-danger">VOID</span>
+                }
+                else
+                {
+                  <span class="badge text-bg-success">OK</span>
+                }
+              </td>
               <td class="text-end">@s.Total.ToString("N2")</td>
               <td class="text-end">
-                <a class="btn btn-outline-secondary btn-sm" asp-action="Receipt" asp-route-id="@s.Id">Receipt</a>
+                <div class="d-flex justify-content-end gap-2">
+                  <a class="btn btn-outline-secondary btn-sm" asp-action="Details" asp-route-id="@s.Id">Details</a>
+                  <a class="btn btn-outline-secondary btn-sm" asp-action="Receipt" asp-route-id="@s.Id">Receipt</a>
+                </div>
               </td>
             </tr>
           }

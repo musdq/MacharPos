@@ -62,7 +62,16 @@ namespace MacharPos.Web.Migrations
                     b.Property<string>("Address")
                         .HasColumnType("text");
 
+                    b.Property<int>("CreditDueDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("CreditLimit")
+                        .HasColumnType("numeric");
+
                     b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsCreditApproved")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
@@ -327,11 +336,23 @@ namespace MacharPos.Web.Migrations
                     b.Property<Guid>("StationId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("Subtotal")
                         .HasColumnType("numeric");
 
                     b.Property<decimal>("Total")
                         .HasColumnType("numeric");
+
+                    b.Property<string>("VoidReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("VoidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VoidedByUserId")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -378,6 +399,81 @@ namespace MacharPos.Web.Migrations
                     b.HasIndex("SaleId");
 
                     b.ToTable("SaleItems");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.ShiftClose", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("CashCollected")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("CashCounted")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("CashVariance")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClosedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("CreditCollectedTotal")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("CreditIssuedTotal")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("HandedOverTo")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("PosCollected")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("ShiftDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("ShiftEndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ShiftName")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("ShiftStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("TotalLpgKg")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("TotalSales")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("TotalTransactions")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TransferCollected")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StationId", "ShiftStartUtc");
+
+                    b.ToTable("ShiftCloses");
                 });
 
             modelBuilder.Entity("MacharPos.Core.Entities.Station", b =>
@@ -692,6 +788,17 @@ namespace MacharPos.Web.Migrations
                     b.Navigation("Product");
 
                     b.Navigation("Sale");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.ShiftClose", b =>
+                {
+                    b.HasOne("MacharPos.Core.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Station");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

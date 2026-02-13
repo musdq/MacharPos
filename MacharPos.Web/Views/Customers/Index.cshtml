@@ -48,6 +48,8 @@
             <th>Name</th>
             <th>Phone</th>
             <th>Address</th>
+            <th>Credit</th>
+            <th class="text-end">Limit</th>
             <th>Status</th>
             <th class="text-end"></th>
           </tr>
@@ -59,6 +61,17 @@
               <td class="fw-semibold">@c.Name</td>
               <td>@(c.Phone ?? "-")</td>
               <td class="text-break">@(c.Address ?? "-")</td>
+              <td>
+                @if (c.IsCreditApproved)
+                {
+                  <span class="badge text-bg-primary">Approved</span>
+                }
+                else
+                {
+                  <span class="badge text-bg-secondary">No</span>
+                }
+              </td>
+              <td class="text-end">₦@c.CreditLimit.ToString("N2")</td>
               <td>
                 @if (c.IsActive) { <span class="badge text-bg-success">Active</span> }
                 else { <span class="badge text-bg-secondary">Inactive</span> }

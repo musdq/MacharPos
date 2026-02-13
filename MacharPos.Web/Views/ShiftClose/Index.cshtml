@@ -1,0 +1,64 @@
+@model List<MacharPos.Core.Entities.ShiftClose>
+
+@{
+    ViewData["Title"] = "Shift Close";
+    var stationName = (string)ViewBag.StationName;
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h5 mb-0">Shift Close</h1>
+    <div class="text-secondary small">Station: <span class="fw-semibold">@stationName</span></div>
+  </div>
+  <div class="d-flex gap-2">
+    @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
+    {
+      <a class="btn btn-dark btn-sm" asp-action="New">Start Shift</a>
+    }
+  </div>
+</div>
+
+@if (TempData["Ok"] is string ok) { <div class="alert alert-success">@ok</div> }
+@if (TempData["Err"] is string err) { <div class="alert alert-danger">@err</div> }
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Start</th>
+            <th>Shift</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th class="text-end">Total Sales</th>
+            <th class="text-end">Cash</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var s in Model)
+          {
+            <tr>
+              <td>@s.ShiftStartUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+              <td class="fw-semibold">@s.ShiftName</td>
+              <td>@s.ShiftDate.ToString("yyyy-MM-dd")</td>
+              <td>
+                @if (s.IsClosed) { <span class="badge text-bg-success">Closed</span> }
+                else { <span class="badge text-bg-warning">Open</span> }
+              </td>
+              <td class="text-end">₦@s.TotalSales.ToString("N2")</td>
+              <td class="text-end">₦@s.CashCollected.ToString("N2")</td>
+              <td class="text-end">
+                @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
+                {
+                  <a class="btn btn-outline-secondary btn-sm" asp-action="Close" asp-route-id="@s.Id">View / Close</a>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

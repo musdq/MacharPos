@@ -1,0 +1,106 @@
+@model MacharPos.Web.ViewModels.ShiftClose.ShiftCloseCloseVm
+
+@{
+    ViewData["Title"] = "Close Shift";
+    var alreadyClosed = (bool)(ViewBag.IsAlreadyClosed ?? false);
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h5 mb-0">Close Shift</h1>
+    <div class="text-secondary small">@Model.ShiftName • @Model.ShiftDate.ToString("yyyy-MM-dd")</div>
+  </div>
+  <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-12 col-md-4">
+        <div class="text-secondary small">Start</div>
+        <div class="fw-semibold">@Model.ShiftStartUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="text-secondary small">End (now)</div>
+        <div class="fw-semibold">@Model.ShiftEndUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="text-secondary small">Transactions</div>
+        <div class="fw-semibold">@Model.TotalTransactions</div>
+      </div>
+    </div>
+
+    <hr class="my-3" />
+
+    <div class="row g-2">
+      <div class="col-6 col-md-3">
+        <div class="text-secondary small">Total Sales</div>
+        <div class="fw-semibold">₦@Model.TotalSales.ToString("N2")</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-secondary small">Cash</div>
+        <div class="fw-semibold">₦@Model.CashCollected.ToString("N2")</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-secondary small">POS</div>
+        <div class="fw-semibold">₦@Model.PosCollected.ToString("N2")</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-secondary small">Transfer</div>
+        <div class="fw-semibold">₦@Model.TransferCollected.ToString("N2")</div>
+      </div>
+    </div>
+
+    <div class="row g-2 mt-2">
+      <div class="col-6 col-md-3">
+        <div class="text-secondary small">LPG Sold</div>
+        <div class="fw-semibold">@Model.TotalLpgKg.ToString("N2") kg</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-secondary small">Credit Issued</div>
+        <div class="fw-semibold">₦@Model.CreditIssuedTotal.ToString("N2")</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-secondary small">Credit Collected</div>
+        <div class="fw-semibold">₦@Model.CreditCollectedTotal.ToString("N2")</div>
+      </div>
+    </div>
+
+    <hr class="my-3" />
+
+    @if (alreadyClosed)
+    {
+      <div class="alert alert-warning mb-0">
+        This shift is already closed.
+      </div>
+    }
+    else
+    {
+      <form method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+
+        <div class="row g-2">
+          <div class="col-12 col-md-4">
+            <label class="form-label">Cash Counted (₦)</label>
+            <input class="form-control" asp-for="CashCounted" type="number" step="0.01" />
+            <div class="form-text">Variance will be calculated vs Cash collected.</div>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label">Hand Over To (optional)</label>
+            <input class="form-control" asp-for="HandedOverTo" />
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label">Notes (optional)</label>
+            <input class="form-control" asp-for="Notes" />
+          </div>
+        </div>
+
+        <button class="btn btn-dark w-100 mt-3" type="submit"
+                onclick="return confirm('Close this shift now?');">
+          Close Shift
+        </button>
+      </form>
+    }
+  </div>
+</div>

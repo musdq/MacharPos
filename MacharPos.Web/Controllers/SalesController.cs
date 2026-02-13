@@ -1,4 +1,4 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using MacharPos.Core.Entities;
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Linq;
 
 namespace MacharPos.Web.Controllers;
@@ -27,7 +28,10 @@ public class SalesController : Controller
         _stationCtx = stationCtx;
         _users = users;
         _signIn = signIn;
+
     }
+
+
     // Normalizes date for DATE column ("date") => Kind must NOT be Utc
     private static DateTime AsDateOnly(DateTime dt)
         => DateTime.SpecifyKind(dt.Date, DateTimeKind.Unspecified);
@@ -40,6 +44,7 @@ public class SalesController : Controller
         if (cleaned.Length >= 3) return cleaned[..3];
         return cleaned.PadRight(3, 'X');
     }
+
 
     [HttpGet]
     public async Task<IActionResult> Index(string? quick = null, DateTime? startDate = null, DateTime? endDate = null)
@@ -101,9 +106,101 @@ public class SalesController : Controller
         ViewBag.StartDate = utcStart.ToString("yyyy-MM-dd");
         ViewBag.EndDate = utcEndExclusive.AddDays(-1).ToString("yyyy-MM-dd");
 
-        ViewBag.Total = sales.Sum(s => s.Total);
+        ViewBag.Total = sales.Where(s => s.Status == SaleStatus.Completed).Sum(s => s.Total);
 
         return View(sales);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Details(Guid id)
+    {
+        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+
+        var sale = await _db.Sales.AsNoTracking()
+            .Include(s => s.Customer)
+            .Include(s => s.Items).ThenInclude(i => i.Product)
+            .FirstOrDefaultAsync(s => s.Id == id && s.StationId == stationId);
+
+        if (sale is null) return NotFound();
+
+        return View(sale);
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin,StationManager")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Void(Guid id, string? reason)
+    {
+        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+        var user = await _users.GetUserAsync(User);
+        if (user is null) return Unauthorized();
+
+        reason = (reason ?? "").Trim();
+        if (reason.Length < 3)
+        {
+            TempData["Err"] = "Void reason is required.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        var sale = await _db.Sales
+            .Include(s => s.Items)
+            .FirstOrDefaultAsync(s => s.Id == id && s.StationId == stationId);
+
+        if (sale is null) return NotFound();
+        if (sale.Status == SaleStatus.Voided)
+        {
+            TempData["Err"] = "Sale is already voided.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        // Do not allow voiding credit sales once payments have been received.
+        var hasPayments = await _db.CreditPayments.AnyAsync(p => p.SaleId == sale.Id);
+        if (hasPayments)
+        {
+            TempData["Err"] = "Cannot void: this sale has credit payment records. Use a proper refund/adjustment flow.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            // Reverse LPG batch sold Kg if needed
+            var lpgByBatch = sale.Items
+                .Where(i => i.LpgBatchId.HasValue && (i.LpgKg ?? 0m) > 0m)
+                .GroupBy(i => i.LpgBatchId!.Value)
+                .Select(g => new { BatchId = g.Key, Kg = g.Sum(x => x.LpgKg ?? 0m) })
+                .ToList();
+
+            if (lpgByBatch.Count > 0)
+            {
+                var batchIds = lpgByBatch.Select(x => x.BatchId).ToList();
+                var batches = await _db.LpgBatches.Where(b => batchIds.Contains(b.Id)).ToListAsync();
+
+                foreach (var grp in lpgByBatch)
+                {
+                    var batch = batches.FirstOrDefault(b => b.Id == grp.BatchId);
+                    if (batch is null) continue;
+                    batch.SoldKg = Math.Max(0m, batch.SoldKg - grp.Kg);
+                }
+                await _db.SaveChangesAsync();
+            }
+
+            sale.Status = SaleStatus.Voided;
+            sale.VoidedByUserId = user.Id;
+            sale.VoidedAtUtc = DateTime.UtcNow;
+            sale.VoidReason = reason;
+
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            TempData["Ok"] = "Sale voided.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
     }
 
     [HttpGet]
@@ -114,7 +211,7 @@ public class SalesController : Controller
         // Phase 1 control: warn if previous business day wasn't closed
         var yesterdayDateOnly = AsDateOnly(DateTime.Today.AddDays(-1));
 
-        // Only warn if this station has any prior activity (sales before today or any older daily close)
+        // Only warn if this station has any prior activity (sales before today)
         var hasPriorActivity = await _db.Sales.AsNoTracking()
             .AnyAsync(s => s.StationId == stationId && s.CreatedAt < DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
 
@@ -129,7 +226,6 @@ public class SalesController : Controller
                 ViewBag.UnclosedDateDisplay = yesterdayDateOnly.ToString("ddd, dd MMM yyyy");
             }
         }
-
 
         // Customers for station, default Walk-in
         var customers = await _db.Customers.AsNoTracking()
@@ -170,7 +266,99 @@ public class SalesController : Controller
         var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
-        // Reload dropdowns (in case of validation error)
+        await PopulateDropdownsAsync(vm, stationId);
+
+        NormalizeAndValidateLines(vm);
+        if (!ModelState.IsValid) return View(vm);
+
+        var prodMap = await LoadProductsMapAsync(vm);
+
+        // Determine if we need LPG batch + if we need manager approval
+        var needsLpgBatch = vm.Lines.Any(l => prodMap.TryGetValue(l.ProductId, out var p) && (p.EquivalentKg ?? 0m) > 0m);
+        var hasPriceOverride = HasPriceOverride(vm, prodMap);
+        var discount = NormalizeDiscount(vm.DiscountAmount);
+
+        if (discount > 0 && discount > CalculateSubtotalPreview(vm, prodMap))
+        {
+            ModelState.AddModelError("", "Discount cannot be greater than subtotal.");
+            return View(vm);
+        }
+
+        // ✅ FIX: declare approvedByUserId BEFORE it’s used
+        string? approvedByUserId = null;
+
+        if (discount > 0 || hasPriceOverride)
+        {
+            var approval = await TryGetManagerApprovalAsync(vm, stationId);
+            if (!approval.Success)
+            {
+                ModelState.AddModelError("", approval.ErrorMessage ?? "Manager authorization failed.");
+                return View(vm);
+            }
+            approvedByUserId = approval.ManagerUserId;
+        }
+
+        var activeBatch = needsLpgBatch
+            ? await GetActiveLpgBatchOrModelErrorAsync(stationId)
+            : null;
+
+        if (needsLpgBatch && activeBatch is null)
+            return View(vm); // error already added
+
+        var receiptNo = await GenerateReceiptNoAsync(stationId);
+
+        // Build sale + items
+        var sale = BuildSaleSkeleton(vm, stationId, user.Id, receiptNo);
+
+        var build = BuildSaleItems(vm, prodMap, activeBatch, approvedByUserId);
+        if (!build.Success)
+        {
+            ModelState.AddModelError("", build.ErrorMessage ?? "Unable to build sale items.");
+            return View(vm);
+        }
+
+        sale.Items.AddRange(build.Items);
+        sale.Subtotal = build.Subtotal;
+        sale.DiscountAmount = discount;
+        sale.Total = build.Subtotal - discount;
+        sale.DiscountApprovedByUserId = approvedByUserId;
+        sale.DiscountApprovedAt = (discount > 0) ? DateTime.UtcNow : null;
+
+        // Stock validation for LPG batch
+        if (activeBatch is not null && build.TotalLpgKg > 0m && activeBatch.RemainingKg < build.TotalLpgKg)
+        {
+            ModelState.AddModelError("",
+                $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N0}kg, attempted {build.TotalLpgKg:N0}kg.");
+            return View(vm);
+        }
+
+        // Save transactionally
+        using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            _db.Sales.Add(sale);
+            await _db.SaveChangesAsync();
+
+            if (activeBatch is not null && build.TotalLpgKg > 0m)
+            {
+                activeBatch.SoldKg += build.TotalLpgKg;
+                await _db.SaveChangesAsync();
+            }
+
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+
+        return RedirectToAction(nameof(Receipt), new { id = sale.Id });
+    }
+
+
+    private async Task PopulateDropdownsAsync(SaleCreateVm vm, Guid stationId)
+    {
         var customers = await _db.Customers.AsNoTracking()
             .Where(c => c.StationId == stationId && c.IsActive)
             .OrderBy(c => c.Name)
@@ -187,53 +375,67 @@ public class SalesController : Controller
             .Where(pm => pm != PaymentMethod.Credit)
             .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == vm.PaymentMethod))
             .ToList();
+    }
 
-        if (vm.Lines is null || vm.Lines.Count == 0)
-            ModelState.AddModelError("", "Add at least one item.");
+    private void NormalizeAndValidateLines(SaleCreateVm vm)
+    {
+        vm.Lines = vm.Lines?
+            .Where(l => l.ProductId != Guid.Empty && l.Qty > 0)
+            .ToList() ?? new List<SaleLineVm>();
 
-        // Basic line validation
-        vm.Lines = vm.Lines?.Where(l => l.ProductId != Guid.Empty && l.Qty > 0).ToList() ?? new();
         if (vm.Lines.Count == 0)
             ModelState.AddModelError("", "Add at least one valid item.");
+    }
 
-        if (!ModelState.IsValid)
-            return View(vm);
-
-        // Load product details for calculations
+    private async Task<Dictionary<Guid, Product>> LoadProductsMapAsync(SaleCreateVm vm)
+    {
         var productIds = vm.Lines.Select(l => l.ProductId).Distinct().ToList();
-        var prodMap = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+        return await _db.Products.AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+    }
 
-        
-        // Detect any price overrides (client can post UnitPrice if the UI unlocked it)
-        // If any line UnitPrice differs from the product's default price, we require manager authorization.
-        bool hasPriceOverride = false;
+    private bool HasPriceOverride(SaleCreateVm vm, Dictionary<Guid, Product> prodMap)
+    {
+        foreach (var l in vm.Lines)
+        {
+            if (!prodMap.TryGetValue(l.ProductId, out var prod)) continue;
+            if (l.UnitPrice > 0m && l.UnitPrice != prod.DefaultUnitPrice) return true;
+        }
+        return false;
+    }
+
+    private decimal NormalizeDiscount(decimal discount)
+    {
+        return discount < 0 ? 0 : discount;
+    }
+
+    // Used only for discount sanity-check before building items
+    private decimal CalculateSubtotalPreview(SaleCreateVm vm, Dictionary<Guid, Product> prodMap)
+    {
+        decimal subtotal = 0m;
         foreach (var l in vm.Lines)
         {
             if (!prodMap.TryGetValue(l.ProductId, out var p)) continue;
-
-            // Treat empty/zero as "use default"
-            if (l.UnitPrice > 0m && l.UnitPrice != p.DefaultUnitPrice)
-            {
-                hasPriceOverride = true;
-                break;
-            }
+            var unitPrice = (l.UnitPrice > 0m) ? l.UnitPrice : p.DefaultUnitPrice;
+            subtotal += l.Qty * unitPrice;
         }
+        return subtotal;
+    }
 
-// Find active LPG batch if needed
-        var needsLpgBatch = vm.Lines.Any(l => prodMap.TryGetValue(l.ProductId, out var p) && (p.EquivalentKg ?? 0m) > 0m);
-        LpgBatch? activeBatch = null;
-        if (needsLpgBatch)
-        {
-            activeBatch = await _db.LpgBatches.FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == LpgBatchStatus.Active);
-            if (activeBatch is null)
-            {
-                ModelState.AddModelError("", "No ACTIVE LPG batch for your station. Create and activate a batch before LPG refill sales.");
-                return View(vm);
-            }
-        }
+    private async Task<LpgBatch?> GetActiveLpgBatchOrModelErrorAsync(Guid stationId)
+    {
+        var batch = await _db.LpgBatches
+            .FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == LpgBatchStatus.Active);
 
-        
-        // Receipt numbering: STN-YYYYMMDD-000001 (sequence per station per day)
+        if (batch is null)
+            ModelState.AddModelError("", "No ACTIVE LPG batch for your station. Create and activate a batch before LPG refill sales.");
+
+        return batch;
+    }
+
+    private async Task<string> GenerateReceiptNoAsync(Guid stationId)
+    {
         var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
         var stationCode = MakeStationCode(station.Name);
 
@@ -245,19 +447,31 @@ public class SalesController : Controller
             .CountAsync();
 
         var receiptSeq = todayCount + 1;
-        var receiptNo = $"{stationCode}-{DateTime.UtcNow:yyyyMMdd}-{receiptSeq:000000}";
+        return $"{stationCode}-{DateTime.UtcNow:yyyyMMdd}-{receiptSeq:000000}";
+    }
 
-// Build sale + items
-        var sale = new Sale
+    private Sale BuildSaleSkeleton(SaleCreateVm vm, Guid stationId, string soldByUserId, string receiptNo)
+    {
+        return new Sale
         {
             StationId = stationId,
             CustomerId = vm.CustomerId,
-            SoldByUserId = user.Id,
+            SoldByUserId = soldByUserId,
             PaymentMethod = vm.PaymentMethod,
             CreatedAt = DateTime.UtcNow,
-            ReceiptNo = receiptNo
+            ReceiptNo = receiptNo,
+            Items = new List<SaleItem>()
         };
+    }
 
+    private (bool Success, string? ErrorMessage, List<SaleItem> Items, decimal Subtotal, decimal TotalLpgKg)
+        BuildSaleItems(
+            SaleCreateVm vm,
+            Dictionary<Guid, Product> prodMap,
+            LpgBatch? activeBatch,
+            string? approvedByUserId)
+    {
+        var items = new List<SaleItem>();
         decimal subtotal = 0m;
         decimal totalLpgKg = 0m;
 
@@ -267,10 +481,17 @@ public class SalesController : Controller
                 continue;
 
             var qty = line.Qty;
+
+            var wantsOverride = line.UnitPrice > 0m && line.UnitPrice != p.DefaultUnitPrice;
             var unitPrice = p.DefaultUnitPrice;
-            // Apply price override only if one was posted and manager approval passed (validated above)
-            if (line.UnitPrice > 0m && line.UnitPrice != p.DefaultUnitPrice)
+
+            if (wantsOverride)
+            {
+                if (approvedByUserId is null)
+                    return (false, "Manager authorization is required for price override.", new(), 0m, 0m);
+
                 unitPrice = line.UnitPrice;
+            }
 
             var lineTotal = qty * unitPrice;
 
@@ -282,7 +503,6 @@ public class SalesController : Controller
                 LineTotal = lineTotal
             };
 
-            // LPG linkage
             var eqKg = p.EquivalentKg ?? 0m;
             if (eqKg > 0m && activeBatch is not null)
             {
@@ -293,101 +513,35 @@ public class SalesController : Controller
             }
 
             subtotal += lineTotal;
-            sale.Items.Add(item);
+            items.Add(item);
         }
 
-        var discount = vm.DiscountAmount;
+        if (items.Count == 0)
+            return (false, "Add at least one valid item.", new(), 0m, 0m);
 
-        if (discount < 0) discount = 0;
-        if (discount > subtotal)
-        {
-            ModelState.AddModelError("", "Discount cannot be greater than subtotal.");
-            return View(vm);
-        }
-
-        string? approvedByUserId = null;
-
-        if (discount > 0 || hasPriceOverride)
-        {
-            if (string.IsNullOrWhiteSpace(vm.ManagerEmail) || string.IsNullOrWhiteSpace(vm.ManagerPassword))
-            {
-                ModelState.AddModelError("", "Manager authorization is required for discount or price override.");
-                return View(vm);
-            }
-
-            var mgr = await _users.FindByEmailAsync(vm.ManagerEmail.Trim());
-            if (mgr is null)
-            {
-                ModelState.AddModelError("", "Invalid manager credentials.");
-                return View(vm);
-            }
-
-            var pwOk = await _signIn.CheckPasswordSignInAsync(mgr, vm.ManagerPassword, lockoutOnFailure: false);
-            if (!pwOk.Succeeded)
-            {
-                ModelState.AddModelError("", "Invalid manager credentials.");
-                return View(vm);
-            }
-
-            var isManager = await _users.IsInRoleAsync(mgr, "StationManager") || await _users.IsInRoleAsync(mgr, "Admin");
-            if (!isManager)
-            {
-                ModelState.AddModelError("", "Only StationManager/Admin can approve discounts.");
-                return View(vm);
-            }
-
-            // Optional: enforce same station
-            if (mgr.HomeStationId != stationId && !await _users.IsInRoleAsync(mgr, "Admin"))
-            {
-                ModelState.AddModelError("", "Manager must belong to this station to approve discount.");
-                return View(vm);
-            }
-
-            if (discount > 0) approvedByUserId = mgr.Id;
-        }
-
-
-        sale.Subtotal = subtotal;
-        sale.DiscountAmount = discount;
-        sale.Total = subtotal - discount;
-        sale.DiscountApprovedByUserId = approvedByUserId;
-        sale.DiscountApprovedAt = (discount > 0) ? DateTime.UtcNow : null;
-
-
-        // Stock validation for LPG batch
-        if (activeBatch is not null && totalLpgKg > 0m)
-        {
-            if (activeBatch.RemainingKg < totalLpgKg)
-            {
-                ModelState.AddModelError("", $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N0}kg, attempted {totalLpgKg:N0}kg.");
-                return View(vm);
-            }
-        }
-
-
-        // Save transactionally
-        using var tx = await _db.Database.BeginTransactionAsync();
-        try
-        {
-            _db.Sales.Add(sale);
-            await _db.SaveChangesAsync();
-
-            if (activeBatch is not null && totalLpgKg > 0m)
-            {
-                activeBatch.SoldKg += totalLpgKg;
-                await _db.SaveChangesAsync();
-            }
-
-            await tx.CommitAsync();
-        }
-        catch
-        {
-            await tx.RollbackAsync();
-            throw;
-        }
-
-        return RedirectToAction(nameof(Receipt), new { id = sale.Id });
+        return (true, null, items, subtotal, totalLpgKg);
     }
+
+    private async Task<(bool Success, string? ErrorMessage, string? ManagerUserId)> TryGetManagerApprovalAsync(SaleCreateVm vm, Guid stationId)
+    {
+        if (string.IsNullOrWhiteSpace(vm.ManagerEmail) || string.IsNullOrWhiteSpace(vm.ManagerPassword))
+            return (false, "Manager authorization is required for discount or price override.", null);
+
+        var mgr = await _users.FindByEmailAsync(vm.ManagerEmail.Trim());
+        if (mgr is null) return (false, "Invalid manager credentials.", null);
+
+        var pwOk = await _signIn.CheckPasswordSignInAsync(mgr, vm.ManagerPassword, lockoutOnFailure: false);
+        if (!pwOk.Succeeded) return (false, "Invalid manager credentials.", null);
+
+        var isManager = await _users.IsInRoleAsync(mgr, "StationManager") || await _users.IsInRoleAsync(mgr, "Admin");
+        if (!isManager) return (false, "Only StationManager/Admin can approve discounts.", null);
+
+        if (mgr.HomeStationId != stationId && !await _users.IsInRoleAsync(mgr, "Admin"))
+            return (false, "Manager must belong to this station to approve discount.", null);
+
+        return (true, null, mgr.Id);
+    }
+
 
     [HttpGet]
     public async Task<IActionResult> Receipt(Guid id)
@@ -467,11 +621,12 @@ public class SalesController : Controller
         ws.Cell(1, 3).Value = "DateTime(UTC)";
         ws.Cell(1, 4).Value = "Customer";
         ws.Cell(1, 5).Value = "PaymentMethod";
-        ws.Cell(1, 6).Value = "Item";
-        ws.Cell(1, 7).Value = "Qty";
-        ws.Cell(1, 8).Value = "UnitPrice";
-        ws.Cell(1, 9).Value = "LineTotal";
-        ws.Cell(1, 10).Value = "LpgKg";
+        ws.Cell(1, 6).Value = "Status";
+        ws.Cell(1, 7).Value = "Item";
+        ws.Cell(1, 8).Value = "Qty";
+        ws.Cell(1, 9).Value = "UnitPrice";
+        ws.Cell(1, 10).Value = "LineTotal";
+        ws.Cell(1, 11).Value = "LpgKg";
         ws.Row(1).Style.Font.Bold = true;
 
         int r = 2;
@@ -484,11 +639,12 @@ public class SalesController : Controller
                 ws.Cell(r, 3).Value = s.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
                 ws.Cell(r, 4).Value = s.Customer?.Name ?? "Walk-in";
                 ws.Cell(r, 5).Value = s.PaymentMethod.ToString();
-                ws.Cell(r, 6).Value = it.Product?.Name ?? "";
-                ws.Cell(r, 7).Value = it.Qty;
-                ws.Cell(r, 8).Value = it.UnitPrice;
-                ws.Cell(r, 9).Value = it.LineTotal;
-                ws.Cell(r, 10).Value = it.LpgKg ?? 0m;
+                ws.Cell(r, 6).Value = s.Status.ToString();
+                ws.Cell(r, 7).Value = it.Product?.Name ?? "";
+                ws.Cell(r, 8).Value = it.Qty;
+                ws.Cell(r, 9).Value = it.UnitPrice;
+                ws.Cell(r, 10).Value = it.LineTotal;
+                ws.Cell(r, 11).Value = it.LpgKg ?? 0m;
                 r++;
             }
         }

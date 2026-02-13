@@ -1,0 +1,57 @@
+@model MacharPos.Web.ViewModels.Credit.CreditAgingVm
+
+@{
+    ViewData["Title"] = "Credit Aging";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h5 mb-0">Credit Aging</h1>
+    <div class="text-secondary small">As of @Model.AsOfUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+  </div>
+  <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
+</div>
+
+<div class="alert alert-info">
+  Total outstanding: <span class="fw-semibold">₦@Model.TotalOutstanding.ToString("N2")</span>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Receipt</th>
+            <th>Created</th>
+            <th>Due</th>
+            <th>Bucket</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">Paid</th>
+            <th class="text-end">Balance</th>
+            <th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @foreach (var r in Model.Rows.OrderByDescending(x => x.DaysPastDue).ThenBy(x => x.CustomerName))
+          {
+            <tr>
+              <td class="fw-semibold">@r.CustomerName</td>
+              <td>@r.ReceiptNo</td>
+              <td>@r.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd")</td>
+              <td>@(r.DueDate?.ToString("yyyy-MM-dd") ?? "-")</td>
+              <td>@r.Bucket</td>
+              <td class="text-end">@r.Total.ToString("N2")</td>
+              <td class="text-end">@r.Paid.ToString("N2")</td>
+              <td class="text-end fw-semibold">@r.Balance.ToString("N2")</td>
+              <td class="text-end">
+                <a class="btn btn-outline-secondary btn-sm" asp-action="AddPayment" asp-route-id="@r.SaleId">Pay</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

@@ -128,6 +128,20 @@ public class CreditController : Controller
 
         if (!ModelState.IsValid) return View(vm);
 
+        // Phase 2: credit approval + limits
+        var customer = await _db.Customers.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == vm.CustomerId && c.StationId == stationId && c.IsActive);
+        if (customer is null)
+        {
+            ModelState.AddModelError("", "Invalid customer.");
+            return View(vm);
+        }
+        if (!customer.IsCreditApproved)
+        {
+            ModelState.AddModelError("", "This customer is not approved for credit.");
+            return View(vm);
+        }
+
         // Build sale (unit price enforced from DB)
         var productIds = vm.Lines.Select(l => l.ProductId).Distinct().ToList();
         var prodMap = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
@@ -154,7 +168,7 @@ public class CreditController : Controller
             CreatedAt = DateTime.UtcNow,
             ReceiptNo = $"CR-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
             IsCreditSale = true,
-            CreditDueDate = vm.DueDate?.Date,
+            CreditDueDate = (vm.DueDate?.Date) ?? (customer.CreditDueDays > 0 ? DateTime.UtcNow.Date.AddDays(customer.CreditDueDays) : null),
             CreditNotes = string.IsNullOrWhiteSpace(vm.Notes) ? null : vm.Notes.Trim()
         };
 
@@ -213,6 +227,26 @@ public class CreditController : Controller
         sale.CreditBalance = sale.Total - initialPaid;
         sale.CreditStatus = sale.CreditBalance <= 0 ? CreditStatus.Settled : CreditStatus.Open;
 
+        // Enforce credit limit (if set > 0)
+        if (customer.CreditLimit > 0m && sale.CreditBalance > 0m)
+        {
+            // Current outstanding for this customer (open credit sales)
+            var outstanding = await _db.Sales.AsNoTracking()
+                .Where(s => s.StationId == stationId
+                            && s.CustomerId == customer.Id
+                            && s.IsCreditSale
+                            && s.Status == SaleStatus.Completed)
+                .Select(s => s.Total - (_db.CreditPayments.Where(p => p.SaleId == s.Id).Sum(p => (decimal?)p.Amount) ?? 0m))
+                .Where(b => b > 0m)
+                .SumAsync();
+
+            if (outstanding + sale.CreditBalance > customer.CreditLimit)
+            {
+                ModelState.AddModelError("", $"Credit limit exceeded. Current outstanding: ₦{outstanding:N2}. This sale adds ₦{sale.CreditBalance:N2}. Limit: ₦{customer.CreditLimit:N2}.");
+                return View(vm);
+            }
+        }
+
         using var tx = await _db.Database.BeginTransactionAsync();
         try
         {
@@ -266,6 +300,104 @@ public class CreditController : Controller
         if (sale is null) return NotFound();
 
         return View(sale);
+    }
+
+    // Phase 2: Aging report for outstanding credit
+    [HttpGet]
+    public async Task<IActionResult> Aging()
+    {
+        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+        var now = DateTime.UtcNow;
+
+        var openSales = await _db.Sales.AsNoTracking()
+            .Include(s => s.Customer)
+            .Where(s => s.StationId == stationId && s.IsCreditSale && s.Status == SaleStatus.Completed)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync();
+
+        var rows = new List<CreditAgingRowVm>();
+        foreach (var s in openSales)
+        {
+            var paid = await _db.CreditPayments.AsNoTracking().Where(p => p.SaleId == s.Id).SumAsync(p => p.Amount);
+            var balance = s.Total - paid;
+            if (balance <= 0m) continue;
+
+            var due = s.CreditDueDate?.Date;
+            var daysPastDue = due is null ? 0 : (int)Math.Floor((now.Date - due.Value.Date).TotalDays);
+
+            rows.Add(new CreditAgingRowVm
+            {
+                SaleId = s.Id,
+                ReceiptNo = s.ReceiptNo,
+                CustomerName = s.Customer?.Name ?? "-",
+                CreatedAtUtc = s.CreatedAt,
+                DueDate = due,
+                DaysPastDue = daysPastDue,
+                Total = s.Total,
+                Paid = paid,
+                Balance = balance
+            });
+        }
+
+        var vm = new CreditAgingVm
+        {
+            AsOfUtc = now,
+            Rows = rows.OrderBy(r => r.Bucket).ThenByDescending(r => r.Balance).ToList()
+        };
+
+        return View(vm);
+    }
+
+    // Phase 2: Customer statement
+    [HttpGet]
+    public async Task<IActionResult> Customer(Guid id)
+    {
+        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+        var customer = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id && c.StationId == stationId);
+        if (customer is null) return NotFound();
+
+        var now = DateTime.UtcNow;
+        var lines = new List<CustomerStatementLineVm>();
+
+        var creditSales = await _db.Sales.AsNoTracking()
+            .Where(s => s.StationId == stationId && s.CustomerId == id && s.IsCreditSale && s.Status == SaleStatus.Completed)
+            .OrderBy(s => s.CreatedAt)
+            .ToListAsync();
+
+        foreach (var s in creditSales)
+        {
+            lines.Add(new CustomerStatementLineVm
+            {
+                DateUtc = s.CreatedAt,
+                Description = $"Credit Sale {s.ReceiptNo}",
+                Amount = s.Total
+            });
+
+            var pays = await _db.CreditPayments.AsNoTracking()
+                .Where(p => p.SaleId == s.Id)
+                .OrderBy(p => p.ReceivedAtUtc)
+                .ToListAsync();
+
+            foreach (var p in pays)
+            {
+                lines.Add(new CustomerStatementLineVm
+                {
+                    DateUtc = p.ReceivedAtUtc,
+                    Description = $"Payment ({p.Method}) for {s.ReceiptNo}",
+                    Amount = -p.Amount
+                });
+            }
+        }
+
+        var vm = new CustomerStatementVm
+        {
+            CustomerId = customer.Id,
+            CustomerName = customer.Name,
+            AsOfUtc = now,
+            Lines = lines.OrderBy(l => l.DateUtc).ToList()
+        };
+
+        return View(vm);
     }
 
     [HttpGet]

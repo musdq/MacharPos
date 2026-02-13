@@ -9,7 +9,6 @@
     <div class="text-secondary small">@Model.ReceiptNo</div>
   </div>
   <div class="d-flex gap-2">
-    <button class="btn btn-outline-dark btn-sm" type="button" onclick="copyReceiptSummary()">Copy Summary</button>
     <button class="btn btn-dark btn-sm" onclick="window.print()">Print</button>
     <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back to Sales</a>
   </div>
@@ -19,6 +18,12 @@
   <div class="card-body p-3">
     <div class="text-center fw-semibold">@Model.Station?.Name</div>
     <div class="text-center small text-secondary">Machar POS Receipt</div>
+    @if (Model.Status == MacharPos.Core.Entities.SaleStatus.Voided)
+    {
+      <div class="text-center mt-2">
+        <span class="badge text-bg-danger">VOID</span>
+      </div>
+    }
     <hr />
 
     <div class="small">
@@ -74,69 +79,3 @@
     <div class="text-center small text-secondary mt-2">Thank you!</div>
   </div>
 </div>
-
-@section Scripts {
-<script>
-  function copyReceiptSummary() {
-    // WhatsApp-friendly summary
-    const lines = [];
-    lines.push(`Machar POS Receipt`);
-    lines.push(`Station: @((Model.Station?.Name ?? "" ).Replace("`", ""))`);
-    lines.push(`Receipt: @Model.ReceiptNo`);
-    lines.push(`Date: @Model.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")`);
-    lines.push(`Customer: @((Model.Customer?.Name ?? "Walk-in").Replace("`", ""))`);
-    lines.push(`Payment: @Model.PaymentMethod`);
-    lines.push(`---`);
-
-@foreach (var it in Model.Items)
-{
-    <text>
-    lines.push(`- @((it.Product?.Name ?? "Item").Replace("`", "")) | @it.Qty.ToString("N2") x ₦@it.UnitPrice.ToString("N2") = ₦@it.LineTotal.ToString("N2")`);
-    </text>
-}
-
-    lines.push(`---`);
-    lines.push(`Subtotal: ₦@Model.Subtotal.ToString("N2")`);
-@if (Model.DiscountAmount > 0)
-{
-    <text>lines.push(`Discount: - ₦@Model.DiscountAmount.ToString("N2")`);
-    </text>
-}
-    lines.push(`Total: ₦@Model.Total.ToString("N2")`);
-
-    const txt = lines.join('\n');
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(txt)
-        .then(() => toastCopied())
-        .catch(() => fallbackCopy(txt));
-    } else {
-      fallbackCopy(txt);
-    }
-  }
-
-  function fallbackCopy(text) {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    toastCopied();
-  }
-
-  function toastCopied() {
-    // Simple Bootstrap-ish toast without additional deps
-    const div = document.createElement('div');
-    div.className = 'position-fixed bottom-0 end-0 p-3';
-    div.style.zIndex = 9999;
-    div.innerHTML = `
-      <div class="alert alert-success shadow-sm mb-0">
-        Copied receipt summary.
-      </div>`;
-    document.body.appendChild(div);
-    setTimeout(() => div.remove(), 1500);
-  }
-</script>
-}

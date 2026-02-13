@@ -8,6 +8,12 @@ namespace MacharPos.Core.Entities
 {
     public enum PaymentMethod { Cash = 0, POS = 1, Transfer = 2, Credit = 3 }
 
+    public enum SaleStatus
+    {
+        Completed = 0,
+        Voided = 1
+    }
+
     public enum CreditStatus
     {
         Open = 0,
@@ -33,6 +39,12 @@ namespace MacharPos.Core.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public List<SaleItem> Items { get; set; } = new();
+
+        // --- Voids / adjustments (Phase 2) ---
+        public SaleStatus Status { get; set; } = SaleStatus.Completed;
+        public string? VoidedByUserId { get; set; }
+        public DateTime? VoidedAtUtc { get; set; }
+        public string? VoidReason { get; set; }
 
         public decimal DiscountAmount { get; set; } = 0m;
         public string? DiscountApprovedByUserId { get; set; }

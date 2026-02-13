@@ -16,6 +16,16 @@ namespace MacharPos.Core.Entities
         public string? Phone { get; set; }
         public string? Address { get; set; }
 
+        // --- Credit controls (Phase 2) ---
+        // Only approved customers can be used for credit sales.
+        public bool IsCreditApproved { get; set; } = false;
+
+        // Maximum outstanding credit allowed for this customer.
+        public decimal CreditLimit { get; set; } = 0m;
+
+        // Default repayment terms in days (used to auto-calc due dates).
+        public int CreditDueDays { get; set; } = 0;
+
         public bool IsActive { get; set; } = true;
     }
 }

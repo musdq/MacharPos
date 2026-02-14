@@ -167,7 +167,7 @@ public class DailyCloseController : Controller
             .Select(x => new DailyCloseVm.TankHistoryRowVm(
                 x.CloseDate,
                 x.TankOpeningKg,
-                (decimal)x.TankReceiptsKg,
+                x.TankReceiptsKg ?? 0m,
                 x.TankClosingKg,
                 x.TotalLpgKg,
                 x.TankScaleSoldKg,

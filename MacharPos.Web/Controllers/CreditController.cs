@@ -25,6 +25,30 @@ public class CreditController : Controller
         _users = users;
     }
 
+
+
+    // Normalizes date for DATE column ("date") => Kind must NOT be Utc
+    private static DateTime AsDateOnly(DateTime dt)
+        => DateTime.SpecifyKind(dt.Date, DateTimeKind.Unspecified);
+
+    private bool IsAdminOverride()
+        => User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
+
+    private async Task<(bool Allowed, string Message)> GuardClosedDayAsync(Guid stationId, DateTime businessDate)
+    {
+        if (IsAdminOverride())
+            return (true, "");
+
+        var dateOnly = AsDateOnly(businessDate);
+
+        var isClosed = await _db.DailyCloses.AsNoTracking()
+            .AnyAsync(x => x.StationId == stationId && x.CloseDate == dateOnly && x.IsClosed);
+
+        if (!isClosed) return (true, "");
+
+        return (false, $"Operation not allowed. {dateOnly:yyyy-MM-dd} is already closed. Admin only.");
+    }
+
     // Ledger: open credits first, filter by customer and date range (optional)
     [HttpGet]
     public async Task<IActionResult> Index(Guid? customerId = null, bool showSettled = false)
@@ -60,7 +84,15 @@ public class CreditController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        var customers = await _db.Customers.AsNoTracking()
+        
+
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        if (!guard.Allowed)
+        {
+            TempData["Err"] = guard.Message;
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+        }
+var customers = await _db.Customers.AsNoTracking()
             .Where(c => c.StationId == stationId && c.IsActive)
             .OrderBy(c => c.Name)
             .ToListAsync();
@@ -96,7 +128,15 @@ public class CreditController : Controller
     public async Task<IActionResult> New(CreditSaleCreateVm vm)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        var user = await _users.GetUserAsync(User);
+        
+
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        if (!guard.Allowed)
+        {
+            TempData["Err"] = guard.Message;
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+        }
+var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
         // Reload dropdowns
@@ -406,7 +446,15 @@ public class CreditController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        var sale = await _db.Sales.AsNoTracking()
+        
+
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        if (!guard.Allowed)
+        {
+            TempData["Err"] = guard.Message;
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+        }
+var sale = await _db.Sales.AsNoTracking()
             .Include(s => s.Customer)
             .FirstOrDefaultAsync(s => s.Id == id && s.StationId == stationId && s.IsCreditSale);
 
@@ -435,7 +483,15 @@ public class CreditController : Controller
     public async Task<IActionResult> AddPayment(CreditPaymentVm vm)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        var user = await _users.GetUserAsync(User);
+        
+
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        if (!guard.Allowed)
+        {
+            TempData["Err"] = guard.Message;
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+        }
+var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
         var sale = await _db.Sales.FirstOrDefaultAsync(s => s.Id == vm.SaleId && s.StationId == stationId && s.IsCreditSale);

@@ -161,20 +161,19 @@ public class DailyCloseController : Controller
         // OPTIONAL: history for last 14 days (shown inside the same Daily Close page)
         // If your VM doesn't have these fields yet, remove this block + the assignments below.
         var history = await _db.DailyCloses.AsNoTracking()
-     .Where(x => x.StationId == stationId && x.CloseDate <= closeDate)
-     .OrderByDescending(x => x.CloseDate)
-     .Take(14)
-     .Select(x => new DailyCloseVm.TankHistoryRowVm(
-         x.CloseDate,
-         x.TankOpeningKg ?? 0m,
-         x.TankReceiptsKg ?? 0m,
-         x.TankClosingKg ?? 0m,
-         x.TotalLpgKg,                 // non-nullable in entity
-         x.TankScaleSoldKg ?? 0m,
-         x.TankVarianceKg ?? 0m
-     ))
-     .ToListAsync();
-
+            .Where(x => x.StationId == stationId && x.CloseDate <= closeDate)
+            .OrderByDescending(x => x.CloseDate)
+            .Take(14)
+            .Select(x => new DailyCloseVm.TankHistoryRowVm(
+                x.CloseDate,
+                x.TankOpeningKg,
+                (decimal)x.TankReceiptsKg,
+                x.TankClosingKg,
+                x.TotalLpgKg,
+                x.TankScaleSoldKg,
+                x.TankVarianceKg
+            ))
+            .ToListAsync();
 
         var vm = new DailyCloseVm
         {
@@ -234,9 +233,9 @@ public class DailyCloseController : Controller
         closeDate = AsDateOnly(closeDate);
 
         var existing = await _db.DailyCloses.FirstOrDefaultAsync(x => x.StationId == stationId && x.CloseDate == closeDate);
-        if (existing is not null && existing.IsClosed)
+        if (existing is not null && existing.IsClosed && !(User.IsInRole("Admin") || User.IsInRole("SuperAdmin")))
         {
-            TempData["Err"] = "This day is already closed. Only SuperAdmin can modify after close.";
+            TempData["Err"] = "This day is already closed. Admin only.";
             return RedirectToAction(nameof(Index), new { date = closeDate.ToString("yyyy-MM-dd") });
         }
 

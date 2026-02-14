@@ -36,7 +36,27 @@ public class SalesController : Controller
     private static DateTime AsDateOnly(DateTime dt)
         => DateTime.SpecifyKind(dt.Date, DateTimeKind.Unspecified);
 
-    private static string MakeStationCode(string stationName)
+    
+
+    private bool IsAdminOverride()
+        => User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
+
+    private async Task<(bool Allowed, string Message)> GuardClosedDayAsync(Guid stationId, DateTime businessDate)
+    {
+        if (IsAdminOverride())
+            return (true, "");
+
+        var dateOnly = AsDateOnly(businessDate);
+
+        var isClosed = await _db.DailyCloses.AsNoTracking()
+            .AnyAsync(x => x.StationId == stationId && x.CloseDate == dateOnly && x.IsClosed);
+
+        if (!isClosed) return (true, "");
+
+        return (false, $"Operation not allowed. {dateOnly:yyyy-MM-dd} is already closed. Admin only.");
+    }
+
+private static string MakeStationCode(string stationName)
     {
         if (string.IsNullOrWhiteSpace(stationName)) return "STN";
         // Keep letters/numbers only, take first 3 chars
@@ -147,6 +167,15 @@ public class SalesController : Controller
             .FirstOrDefaultAsync(s => s.Id == id && s.StationId == stationId);
 
         if (sale is null) return NotFound();
+
+        var guard = await GuardClosedDayAsync(stationId, sale.CreatedAt);
+        if (!guard.Allowed)
+        {
+            TempData["Err"] = guard.Message;
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+
         if (sale.Status == SaleStatus.Voided)
         {
             TempData["Err"] = "Sale is already voided.";
@@ -208,7 +237,15 @@ public class SalesController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        // Phase 1 control: warn if previous business day wasn't closed
+        
+
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        if (!guard.Allowed)
+        {
+            TempData["Err"] = guard.Message;
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+        }
+// Phase 1 control: warn if previous business day wasn't closed
         var yesterdayDateOnly = AsDateOnly(DateTime.Today.AddDays(-1));
 
         // Only warn if this station has any prior activity (sales before today)
@@ -263,7 +300,15 @@ public class SalesController : Controller
     public async Task<IActionResult> New(SaleCreateVm vm)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        var user = await _users.GetUserAsync(User);
+        
+
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        if (!guard.Allowed)
+        {
+            TempData["Err"] = guard.Message;
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+        }
+var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
         await PopulateDropdownsAsync(vm, stationId);

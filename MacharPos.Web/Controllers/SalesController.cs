@@ -203,7 +203,10 @@ private static string MakeStationCode(string stationName)
             if (lpgByBatch.Count > 0)
             {
                 var batchIds = lpgByBatch.Select(x => x.BatchId).ToList();
-                var batches = await _db.LpgBatches.Where(b => batchIds.Contains(b.Id)).ToListAsync();
+                var batches = await _db.LpgBatches
+                    .Where(b => b.StationId == stationId && batchIds.Contains(b.Id))
+                    .ToListAsync();
+
 
                 foreach (var grp in lpgByBatch)
                 {

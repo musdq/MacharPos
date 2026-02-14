@@ -161,19 +161,20 @@ public class DailyCloseController : Controller
         // OPTIONAL: history for last 14 days (shown inside the same Daily Close page)
         // If your VM doesn't have these fields yet, remove this block + the assignments below.
         var history = await _db.DailyCloses.AsNoTracking()
-            .Where(x => x.StationId == stationId && x.CloseDate <= closeDate)
-            .OrderByDescending(x => x.CloseDate)
-            .Take(14)
-            .Select(x => new DailyCloseVm.TankHistoryRowVm(
-                x.CloseDate,
-                x.TankOpeningKg,
-                (decimal)x.TankReceiptsKg,
-                x.TankClosingKg,
-                x.TotalLpgKg,
-                x.TankScaleSoldKg,
-                x.TankVarianceKg
-            ))
-            .ToListAsync();
+     .Where(x => x.StationId == stationId && x.CloseDate <= closeDate)
+     .OrderByDescending(x => x.CloseDate)
+     .Take(14)
+     .Select(x => new DailyCloseVm.TankHistoryRowVm(
+         x.CloseDate,
+         x.TankOpeningKg ?? 0m,
+         x.TankReceiptsKg ?? 0m,
+         x.TankClosingKg ?? 0m,
+         x.TotalLpgKg,                 // non-nullable in entity
+         x.TankScaleSoldKg ?? 0m,
+         x.TankVarianceKg ?? 0m
+     ))
+     .ToListAsync();
+
 
         var vm = new DailyCloseVm
         {

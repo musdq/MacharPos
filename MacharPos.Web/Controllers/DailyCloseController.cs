@@ -2,6 +2,7 @@ using MacharPos.Core.Entities;
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
+using MacharPos.Web.Utils;
 using MacharPos.Web.ViewModels.DailyClose;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -46,9 +47,8 @@ public class DailyCloseController : Controller
 
     private async Task<CloseStats> ComputeStatsAsync(Guid stationId, DateTime closeDateDateOnly)
     {
-        // Sales/Payments are UTC timestamptz: filter using UTC boundaries
-        var utcStart = DateTime.SpecifyKind(closeDateDateOnly, DateTimeKind.Utc);
-        var utcEnd = utcStart.AddDays(1);
+        // Sales/Payments are UTC timestamptz: filter using UTC boundaries that match the *local* business date.
+        var (utcStart, utcEnd) = BusinessTime.UtcDayRangeForLocalDate(closeDateDateOnly);
 
         var sales = await _db.Sales.AsNoTracking()
             .Include(s => s.Items)
@@ -140,8 +140,8 @@ public class DailyCloseController : Controller
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
         var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
 
-        // Use DateTime.Today or input date; normalize to Unspecified Kind for DATE column
-        var closeDate = AsDateOnly(date ?? DateTime.Today);
+        // Business date should be based on station ops (Nigeria/WAT), not server timezone.
+        var closeDate = AsDateOnly(date ?? BusinessTime.TodayLocalDateOnly());
 
         var existing = await _db.DailyCloses.AsNoTracking()
             .FirstOrDefaultAsync(x => x.StationId == stationId && x.CloseDate == closeDate);
@@ -233,9 +233,9 @@ public class DailyCloseController : Controller
         closeDate = AsDateOnly(closeDate);
 
         var existing = await _db.DailyCloses.FirstOrDefaultAsync(x => x.StationId == stationId && x.CloseDate == closeDate);
-        if (existing is not null && existing.IsClosed && !(User.IsInRole("Admin") || User.IsInRole("SuperAdmin")))
+        if (existing is not null && existing.IsClosed)
         {
-            TempData["Err"] = "This day is already closed. Admin only.";
+            TempData["Err"] = "This day is already closed. Only SuperAdmin can modify after close.";
             return RedirectToAction(nameof(Index), new { date = closeDate.ToString("yyyy-MM-dd") });
         }
 

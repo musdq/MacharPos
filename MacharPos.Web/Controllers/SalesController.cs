@@ -1,8 +1,9 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using MacharPos.Core.Entities;
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
+using MacharPos.Web.Utils;
 using MacharPos.Web.ViewModels.Sales;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -28,15 +29,11 @@ public class SalesController : Controller
         _stationCtx = stationCtx;
         _users = users;
         _signIn = signIn;
-
     }
-
 
     // Normalizes date for DATE column ("date") => Kind must NOT be Utc
     private static DateTime AsDateOnly(DateTime dt)
         => DateTime.SpecifyKind(dt.Date, DateTimeKind.Unspecified);
-
-    
 
     private bool IsAdminOverride()
         => User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
@@ -56,7 +53,7 @@ public class SalesController : Controller
         return (false, $"Operation not allowed. {dateOnly:yyyy-MM-dd} is already closed. Admin only.");
     }
 
-private static string MakeStationCode(string stationName)
+    private static string MakeStationCode(string stationName)
     {
         if (string.IsNullOrWhiteSpace(stationName)) return "STN";
         // Keep letters/numbers only, take first 3 chars
@@ -65,53 +62,66 @@ private static string MakeStationCode(string stationName)
         return cleaned.PadRight(3, 'X');
     }
 
-
     [HttpGet]
     public async Task<IActionResult> Index(string? quick = null, DateTime? startDate = null, DateTime? endDate = null)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
         var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
 
-        // Determine range (UTC)
+        // Determine range (UTC) but driven by Nigeria business dates
         DateTime utcStart;
         DateTime utcEndExclusive;
 
-        var now = DateTime.UtcNow;
+        // These are just for display in the filters (Nigeria local dates)
+        DateTime displayStartLocal;
+        DateTime displayEndLocal;
+
+        var todayLocal = BusinessTime.TodayLocalDate();
+
         if (!string.IsNullOrWhiteSpace(quick))
         {
             quick = quick.ToLowerInvariant();
+
             if (quick == "today")
             {
-                utcStart = now.Date;
-                utcEndExclusive = utcStart.AddDays(1);
+                displayStartLocal = todayLocal;
+                displayEndLocal = todayLocal;
+                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
             }
             else if (quick == "week")
             {
-                // last 7 days
-                utcEndExclusive = now.Date.AddDays(1);
-                utcStart = utcEndExclusive.AddDays(-7);
+                displayEndLocal = todayLocal;
+                displayStartLocal = todayLocal.AddDays(-6); // 7 days inclusive
+                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
             }
             else if (quick == "month")
             {
-                utcStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-                utcEndExclusive = utcStart.AddMonths(1);
+                var localNow = BusinessTime.LocalNow();
+                var monthStartLocal = DateTime.SpecifyKind(new DateTime(localNow.Year, localNow.Month, 1), DateTimeKind.Unspecified);
+                var monthEndExclusiveLocal = monthStartLocal.AddMonths(1);
+
+                displayStartLocal = monthStartLocal;
+                displayEndLocal = monthEndExclusiveLocal.AddDays(-1);
+
+                utcStart = BusinessTime.ToUtc(monthStartLocal);
+                utcEndExclusive = BusinessTime.ToUtc(monthEndExclusiveLocal);
             }
             else
             {
-                utcStart = now.Date;
-                utcEndExclusive = utcStart.AddDays(1);
+                displayStartLocal = todayLocal;
+                displayEndLocal = todayLocal;
+                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
             }
         }
         else
         {
-            var s = (startDate?.Date ?? now.Date);
-            var e = (endDate?.Date ?? s);
+            displayStartLocal = AsDateOnly(startDate ?? todayLocal);
+            displayEndLocal = AsDateOnly(endDate ?? displayStartLocal);
 
-            utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
-            utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
+            if (displayEndLocal < displayStartLocal)
+                displayEndLocal = displayStartLocal;
 
-            if (utcEndExclusive < utcStart.AddDays(1))
-                utcEndExclusive = utcStart.AddDays(1);
+            (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
         }
 
         var sales = await _db.Sales.AsNoTracking()
@@ -123,8 +133,8 @@ private static string MakeStationCode(string stationName)
 
         ViewBag.StationName = station.Name;
         ViewBag.Quick = quick;
-        ViewBag.StartDate = utcStart.ToString("yyyy-MM-dd");
-        ViewBag.EndDate = utcEndExclusive.AddDays(-1).ToString("yyyy-MM-dd");
+        ViewBag.StartDate = displayStartLocal.ToString("yyyy-MM-dd");
+        ViewBag.EndDate = displayEndLocal.ToString("yyyy-MM-dd");
 
         ViewBag.Total = sales.Where(s => s.Status == SaleStatus.Completed).Sum(s => s.Total);
 
@@ -175,7 +185,6 @@ private static string MakeStationCode(string stationName)
             return RedirectToAction(nameof(Details), new { id });
         }
 
-
         if (sale.Status == SaleStatus.Voided)
         {
             TempData["Err"] = "Sale is already voided.";
@@ -206,7 +215,6 @@ private static string MakeStationCode(string stationName)
                 var batches = await _db.LpgBatches
                     .Where(b => b.StationId == stationId && batchIds.Contains(b.Id))
                     .ToListAsync();
-
 
                 foreach (var grp in lpgByBatch)
                 {
@@ -240,20 +248,22 @@ private static string MakeStationCode(string stationName)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        
+        var todayLocal = BusinessTime.TodayLocalDate();
 
-        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        var guard = await GuardClosedDayAsync(stationId, todayLocal);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
-            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(todayLocal).ToString("yyyy-MM-dd") });
         }
-// Phase 1 control: warn if previous business day wasn't closed
-        var yesterdayDateOnly = AsDateOnly(DateTime.Today.AddDays(-1));
 
-        // Only warn if this station has any prior activity (sales before today)
+        // Phase 1 control: warn if previous business day wasn't closed
+        var yesterdayDateOnly = AsDateOnly(todayLocal.AddDays(-1));
+
+        // Only warn if this station has any prior activity (sales before today's business-day start)
+        var (utcTodayStart, _) = BusinessTime.UtcRangeForLocalDate(todayLocal);
         var hasPriorActivity = await _db.Sales.AsNoTracking()
-            .AnyAsync(s => s.StationId == stationId && s.CreatedAt < DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
+            .AnyAsync(s => s.StationId == stationId && s.CreatedAt < utcTodayStart);
 
         if (hasPriorActivity)
         {
@@ -283,7 +293,6 @@ private static string MakeStationCode(string stationName)
 
         ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
 
-
         var vm = new SaleCreateVm
         {
             CustomerId = walkin?.Id,
@@ -303,15 +312,17 @@ private static string MakeStationCode(string stationName)
     public async Task<IActionResult> New(SaleCreateVm vm)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        
 
-        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        var todayLocal = BusinessTime.TodayLocalDate();
+
+        var guard = await GuardClosedDayAsync(stationId, todayLocal);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
-            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(todayLocal).ToString("yyyy-MM-dd") });
         }
-var user = await _users.GetUserAsync(User);
+
+        var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
         await PopulateDropdownsAsync(vm, stationId);
@@ -332,7 +343,7 @@ var user = await _users.GetUserAsync(User);
             return View(vm);
         }
 
-        // ✅ FIX: declare approvedByUserId BEFORE it’s used
+        // declare approvedByUserId BEFORE it’s used
         string? approvedByUserId = null;
 
         if (discount > 0 || hasPriceOverride)
@@ -403,7 +414,6 @@ var user = await _users.GetUserAsync(User);
 
         return RedirectToAction(nameof(Receipt), new { id = sale.Id });
     }
-
 
     private async Task PopulateDropdownsAsync(SaleCreateVm vm, Guid stationId)
     {
@@ -487,15 +497,16 @@ var user = await _users.GetUserAsync(User);
         var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
         var stationCode = MakeStationCode(station.Name);
 
-        var utcDayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
-        var utcDayEnd = utcDayStart.AddDays(1);
+        // Receipt should use Nigeria business date, but sequence must match the UTC window for that business day.
+        var todayLocal = BusinessTime.TodayLocalDate();
+        var (utcDayStart, utcDayEnd) = BusinessTime.UtcRangeForLocalDate(todayLocal);
 
         var todayCount = await _db.Sales.AsNoTracking()
             .Where(s => s.StationId == stationId && s.CreatedAt >= utcDayStart && s.CreatedAt < utcDayEnd)
             .CountAsync();
 
         var receiptSeq = todayCount + 1;
-        return $"{stationCode}-{DateTime.UtcNow:yyyyMMdd}-{receiptSeq:000000}";
+        return $"{stationCode}-{todayLocal:yyyyMMdd}-{receiptSeq:000000}";
     }
 
     private Sale BuildSaleSkeleton(SaleCreateVm vm, Guid stationId, string soldByUserId, string receiptNo)
@@ -590,7 +601,6 @@ var user = await _users.GetUserAsync(User);
         return (true, null, mgr.Id);
     }
 
-
     [HttpGet]
     public async Task<IActionResult> Receipt(Guid id)
     {
@@ -615,43 +625,56 @@ var user = await _users.GetUserAsync(User);
 
         DateTime utcStart;
         DateTime utcEndExclusive;
-        var now = DateTime.UtcNow;
+
+        // display dates (Nigeria local)
+        DateTime displayStartLocal;
+        DateTime displayEndLocal;
+
+        var todayLocal = BusinessTime.TodayLocalDate();
 
         if (!string.IsNullOrWhiteSpace(quick))
         {
             quick = quick.ToLowerInvariant();
             if (quick == "today")
             {
-                utcStart = now.Date;
-                utcEndExclusive = utcStart.AddDays(1);
+                displayStartLocal = todayLocal;
+                displayEndLocal = todayLocal;
+                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
             }
             else if (quick == "week")
             {
-                utcEndExclusive = now.Date.AddDays(1);
-                utcStart = utcEndExclusive.AddDays(-7);
+                displayEndLocal = todayLocal;
+                displayStartLocal = todayLocal.AddDays(-6);
+                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
             }
             else if (quick == "month")
             {
-                utcStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-                utcEndExclusive = utcStart.AddMonths(1);
+                var localNow = BusinessTime.LocalNow();
+                var monthStartLocal = DateTime.SpecifyKind(new DateTime(localNow.Year, localNow.Month, 1), DateTimeKind.Unspecified);
+                var monthEndExclusiveLocal = monthStartLocal.AddMonths(1);
+
+                displayStartLocal = monthStartLocal;
+                displayEndLocal = monthEndExclusiveLocal.AddDays(-1);
+
+                utcStart = BusinessTime.ToUtc(monthStartLocal);
+                utcEndExclusive = BusinessTime.ToUtc(monthEndExclusiveLocal);
             }
             else
             {
-                utcStart = now.Date;
-                utcEndExclusive = utcStart.AddDays(1);
+                displayStartLocal = todayLocal;
+                displayEndLocal = todayLocal;
+                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
             }
         }
         else
         {
-            var s = (startDate?.Date ?? now.Date);
-            var e = (endDate?.Date ?? s);
+            displayStartLocal = AsDateOnly(startDate ?? todayLocal);
+            displayEndLocal = AsDateOnly(endDate ?? displayStartLocal);
 
-            // IMPORTANT: mark as UTC so Npgsql accepts it for timestamptz comparisons
-            utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
-            utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
+            if (displayEndLocal < displayStartLocal)
+                displayEndLocal = displayStartLocal;
 
-            if (utcEndExclusive < utcStart.AddDays(1))
-                utcEndExclusive = utcStart.AddDays(1);
+            (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
         }
 
         var sales = await _db.Sales.AsNoTracking()
@@ -703,7 +726,7 @@ var user = await _users.GetUserAsync(User);
         wb.SaveAs(ms);
         ms.Position = 0;
 
-        var fileName = $"Sales_{station.Name.Replace(" ", "_")}_{utcStart:yyyyMMdd}_{utcEndExclusive.AddDays(-1):yyyyMMdd}.xlsx";
+        var fileName = $"Sales_{station.Name.Replace(" ", "_")}_{displayStartLocal:yyyyMMdd}_{displayEndLocal:yyyyMMdd}.xlsx";
         return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 }

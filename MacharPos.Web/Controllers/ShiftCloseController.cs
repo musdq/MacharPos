@@ -1,6 +1,7 @@
 using MacharPos.Core.Entities;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
+using MacharPos.Web.Utils;
 using MacharPos.Web.ViewModels.ShiftClose;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -53,7 +54,7 @@ public class ShiftCloseController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        return View(new ShiftCloseCreateVm { ShiftDate = DateTime.UtcNow.Date, ShiftName = "Morning" });
+        return View(new ShiftCloseCreateVm { ShiftDate = BusinessTime.TodayLocalDateOnly(), ShiftName = "Morning" });
     }
 
     [HttpPost]
@@ -75,7 +76,7 @@ public class ShiftCloseController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var shiftDate = (vm.ShiftDate ?? DateTime.UtcNow.Date).Date;
+        var shiftDate = (vm.ShiftDate ?? BusinessTime.TodayLocalDateOnly()).Date;
 
         var entity = new ShiftClose
         {

@@ -1,9 +1,8 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using MacharPos.Core.Entities;
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
-using MacharPos.Web.Utils;
 using MacharPos.Web.ViewModels.Sales;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -29,11 +28,15 @@ public class SalesController : Controller
         _stationCtx = stationCtx;
         _users = users;
         _signIn = signIn;
+
     }
+
 
     // Normalizes date for DATE column ("date") => Kind must NOT be Utc
     private static DateTime AsDateOnly(DateTime dt)
         => DateTime.SpecifyKind(dt.Date, DateTimeKind.Unspecified);
+
+    
 
     private bool IsAdminOverride()
         => User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
@@ -53,7 +56,7 @@ public class SalesController : Controller
         return (false, $"Operation not allowed. {dateOnly:yyyy-MM-dd} is already closed. Admin only.");
     }
 
-    private static string MakeStationCode(string stationName)
+private static string MakeStationCode(string stationName)
     {
         if (string.IsNullOrWhiteSpace(stationName)) return "STN";
         // Keep letters/numbers only, take first 3 chars
@@ -62,79 +65,86 @@ public class SalesController : Controller
         return cleaned.PadRight(3, 'X');
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Index(string? quick = null, DateTime? startDate = null, DateTime? endDate = null)
-    {
-        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
 
-        // Determine range (UTC) but driven by Nigeria business dates
+    [HttpGet]
+    public async Task<IActionResult> Index(string? quick = null, DateTime? startDate = null, DateTime? endDate = null, Guid? stationId = null)
+    {
+        Guid? stationIdEffective = null;
+        if (IsAdminOverride())
+        {
+            stationIdEffective = stationId;
+        }
+        else
+        {
+            stationIdEffective = await _stationCtx.GetStationIdOrThrowAsync();
+        }
+
+        Station? station = null;
+        if (stationIdEffective.HasValue)
+        {
+            station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationIdEffective.Value);
+        }
+// Determine range (UTC)
         DateTime utcStart;
         DateTime utcEndExclusive;
 
-        // These are just for display in the filters (Nigeria local dates)
-        DateTime displayStartLocal;
-        DateTime displayEndLocal;
-
-        var todayLocal = BusinessTime.TodayLocalDate();
-
+        var now = DateTime.UtcNow;
         if (!string.IsNullOrWhiteSpace(quick))
         {
             quick = quick.ToLowerInvariant();
-
             if (quick == "today")
             {
-                displayStartLocal = todayLocal;
-                displayEndLocal = todayLocal;
-                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
+                utcStart = now.Date;
+                utcEndExclusive = utcStart.AddDays(1);
             }
             else if (quick == "week")
             {
-                displayEndLocal = todayLocal;
-                displayStartLocal = todayLocal.AddDays(-6); // 7 days inclusive
-                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
+                // last 7 days
+                utcEndExclusive = now.Date.AddDays(1);
+                utcStart = utcEndExclusive.AddDays(-7);
             }
             else if (quick == "month")
             {
-                var localNow = BusinessTime.LocalNow();
-                var monthStartLocal = DateTime.SpecifyKind(new DateTime(localNow.Year, localNow.Month, 1), DateTimeKind.Unspecified);
-                var monthEndExclusiveLocal = monthStartLocal.AddMonths(1);
-
-                displayStartLocal = monthStartLocal;
-                displayEndLocal = monthEndExclusiveLocal.AddDays(-1);
-
-                utcStart = BusinessTime.ToUtc(monthStartLocal);
-                utcEndExclusive = BusinessTime.ToUtc(monthEndExclusiveLocal);
+                utcStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                utcEndExclusive = utcStart.AddMonths(1);
             }
             else
             {
-                displayStartLocal = todayLocal;
-                displayEndLocal = todayLocal;
-                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
+                utcStart = now.Date;
+                utcEndExclusive = utcStart.AddDays(1);
             }
         }
         else
         {
-            displayStartLocal = AsDateOnly(startDate ?? todayLocal);
-            displayEndLocal = AsDateOnly(endDate ?? displayStartLocal);
+            var s = (startDate?.Date ?? now.Date);
+            var e = (endDate?.Date ?? s);
 
-            if (displayEndLocal < displayStartLocal)
-                displayEndLocal = displayStartLocal;
+            utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
+            utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
 
-            (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
+            if (utcEndExclusive < utcStart.AddDays(1))
+                utcEndExclusive = utcStart.AddDays(1);
         }
 
         var sales = await _db.Sales.AsNoTracking()
+            .Include(s => s.Station)
             .Include(s => s.Items).ThenInclude(i => i.Product)
             .Include(s => s.Customer)
-            .Where(s => s.StationId == stationId && s.CreatedAt >= utcStart && s.CreatedAt < utcEndExclusive)
+            .Where(s => (!stationIdEffective.HasValue || s.StationId == stationIdEffective.Value) && s.CreatedAt >= utcStart && s.CreatedAt < utcEndExclusive)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
 
-        ViewBag.StationName = station.Name;
+        ViewBag.StationName = station?.Name ?? "All Stations";
+        ViewBag.StationId = stationIdEffective?.ToString();
+        if (IsAdminOverride())
+        {
+            ViewBag.Stations = await _db.Stations.AsNoTracking().OrderBy(s => s.Name)
+                .Select(s => new SelectListItem(s.Name, s.Id.ToString(), stationIdEffective.HasValue && s.Id == stationIdEffective.Value))
+                .ToListAsync();
+        }
         ViewBag.Quick = quick;
-        ViewBag.StartDate = displayStartLocal.ToString("yyyy-MM-dd");
-        ViewBag.EndDate = displayEndLocal.ToString("yyyy-MM-dd");
+        ViewBag.StartDate = utcStart.ToString("yyyy-MM-dd");
+        ViewBag.EndDate = utcEndExclusive.AddDays(-1).ToString("yyyy-MM-dd");
 
         ViewBag.Total = sales.Where(s => s.Status == SaleStatus.Completed).Sum(s => s.Total);
 
@@ -147,6 +157,7 @@ public class SalesController : Controller
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
         var sale = await _db.Sales.AsNoTracking()
+            .Include(s => s.Station)
             .Include(s => s.Customer)
             .Include(s => s.Items).ThenInclude(i => i.Product)
             .FirstOrDefaultAsync(s => s.Id == id && s.StationId == stationId);
@@ -185,6 +196,7 @@ public class SalesController : Controller
             return RedirectToAction(nameof(Details), new { id });
         }
 
+
         if (sale.Status == SaleStatus.Voided)
         {
             TempData["Err"] = "Sale is already voided.";
@@ -215,6 +227,7 @@ public class SalesController : Controller
                 var batches = await _db.LpgBatches
                     .Where(b => b.StationId == stationId && batchIds.Contains(b.Id))
                     .ToListAsync();
+
 
                 foreach (var grp in lpgByBatch)
                 {
@@ -248,22 +261,20 @@ public class SalesController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        var todayLocal = BusinessTime.TodayLocalDate();
+        
 
-        var guard = await GuardClosedDayAsync(stationId, todayLocal);
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
-            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(todayLocal).ToString("yyyy-MM-dd") });
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
+// Phase 1 control: warn if previous business day wasn't closed
+        var yesterdayDateOnly = AsDateOnly(DateTime.Today.AddDays(-1));
 
-        // Phase 1 control: warn if previous business day wasn't closed
-        var yesterdayDateOnly = AsDateOnly(todayLocal.AddDays(-1));
-
-        // Only warn if this station has any prior activity (sales before today's business-day start)
-        var (utcTodayStart, _) = BusinessTime.UtcRangeForLocalDate(todayLocal);
+        // Only warn if this station has any prior activity (sales before today)
         var hasPriorActivity = await _db.Sales.AsNoTracking()
-            .AnyAsync(s => s.StationId == stationId && s.CreatedAt < utcTodayStart);
+            .AnyAsync(s => s.StationId == stationId && s.CreatedAt < DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
 
         if (hasPriorActivity)
         {
@@ -293,6 +304,7 @@ public class SalesController : Controller
 
         ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
 
+
         var vm = new SaleCreateVm
         {
             CustomerId = walkin?.Id,
@@ -313,15 +325,13 @@ public class SalesController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        var todayLocal = BusinessTime.TodayLocalDate();
 
-        var guard = await GuardClosedDayAsync(stationId, todayLocal);
+        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
-            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(todayLocal).ToString("yyyy-MM-dd") });
+            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
-
         var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
@@ -343,7 +353,7 @@ public class SalesController : Controller
             return View(vm);
         }
 
-        // declare approvedByUserId BEFORE it’s used
+        // ✅ FIX: declare approvedByUserId BEFORE it’s used
         string? approvedByUserId = null;
 
         if (discount > 0 || hasPriceOverride)
@@ -364,37 +374,37 @@ public class SalesController : Controller
         if (needsLpgBatch && activeBatch is null)
             return View(vm); // error already added
 
-        var receiptNo = await GenerateReceiptNoAsync(stationId);
-
-        // Build sale + items
-        var sale = BuildSaleSkeleton(vm, stationId, user.Id, receiptNo);
-
-        var build = BuildSaleItems(vm, prodMap, activeBatch, approvedByUserId);
-        if (!build.Success)
-        {
-            ModelState.AddModelError("", build.ErrorMessage ?? "Unable to build sale items.");
-            return View(vm);
-        }
-
-        sale.Items.AddRange(build.Items);
-        sale.Subtotal = build.Subtotal;
-        sale.DiscountAmount = discount;
-        sale.Total = build.Subtotal - discount;
-        sale.DiscountApprovedByUserId = approvedByUserId;
-        sale.DiscountApprovedAt = (discount > 0) ? DateTime.UtcNow : null;
-
-        // Stock validation for LPG batch
-        if (activeBatch is not null && build.TotalLpgKg > 0m && activeBatch.RemainingKg < build.TotalLpgKg)
-        {
-            ModelState.AddModelError("",
-                $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N0}kg, attempted {build.TotalLpgKg:N0}kg.");
-            return View(vm);
-        }
-
-        // Save transactionally
+        // Save transactionally (includes receipt sequence lock)
         using var tx = await _db.Database.BeginTransactionAsync();
         try
         {
+            var receiptNo = await GenerateReceiptNoAsync(stationId);
+
+            // Build sale + items
+            var sale = BuildSaleSkeleton(vm, stationId, user.Id, receiptNo);
+
+            var build = BuildSaleItems(vm, prodMap, activeBatch, approvedByUserId);
+            if (!build.Success)
+            {
+                ModelState.AddModelError("", build.ErrorMessage ?? "Unable to build sale items.");
+                return View(vm);
+            }
+
+            sale.Items.AddRange(build.Items);
+            sale.Subtotal = build.Subtotal;
+            sale.DiscountAmount = discount;
+            sale.Total = build.Subtotal - discount;
+            sale.DiscountApprovedByUserId = approvedByUserId;
+            sale.DiscountApprovedAt = (discount > 0) ? DateTime.UtcNow : null;
+
+            // Stock validation for LPG batch
+            if (activeBatch is not null && build.TotalLpgKg > 0m && activeBatch.RemainingKg < build.TotalLpgKg)
+            {
+                ModelState.AddModelError("",
+                    $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N0}kg, attempted {build.TotalLpgKg:N0}kg.");
+                return View(vm);
+            }
+
             _db.Sales.Add(sale);
             await _db.SaveChangesAsync();
 
@@ -405,14 +415,13 @@ public class SalesController : Controller
             }
 
             await tx.CommitAsync();
+            return RedirectToAction(nameof(Receipt), new { id = sale.Id });
         }
         catch
         {
             await tx.RollbackAsync();
             throw;
         }
-
-        return RedirectToAction(nameof(Receipt), new { id = sale.Id });
     }
 
     private async Task PopulateDropdownsAsync(SaleCreateVm vm, Guid stationId)
@@ -494,19 +503,29 @@ public class SalesController : Controller
 
     private async Task<string> GenerateReceiptNoAsync(Guid stationId)
     {
+
         var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
         var stationCode = MakeStationCode(station.Name);
 
-        // Receipt should use Nigeria business date, but sequence must match the UTC window for that business day.
-        var todayLocal = BusinessTime.TodayLocalDate();
-        var (utcDayStart, utcDayEnd) = BusinessTime.UtcRangeForLocalDate(todayLocal);
+        // Receipt numbering is per station per UTC day.
+        // To avoid duplicates under concurrency, we serialize receipt generation using a PostgreSQL advisory transaction lock.
+        var utcDayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
+        var utcDayEnd = utcDayStart.AddDays(1);
+
+        // Stable per-station key (avoid Guid.GetHashCode which is process-random)
+        var stationKey = BitConverter.ToInt32(stationId.ToByteArray(), 0);
+        var dayKey = int.Parse(DateTime.UtcNow.ToString("yyyyMMdd"));
+
+        // Holds until the surrounding DB transaction commits/rolls back
+        await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, {1});", stationKey, dayKey);
 
         var todayCount = await _db.Sales.AsNoTracking()
             .Where(s => s.StationId == stationId && s.CreatedAt >= utcDayStart && s.CreatedAt < utcDayEnd)
             .CountAsync();
 
         var receiptSeq = todayCount + 1;
-        return $"{stationCode}-{todayLocal:yyyyMMdd}-{receiptSeq:000000}";
+        return $"{stationCode}-{utcDayStart:yyyyMMdd}-{receiptSeq:000000}";
+
     }
 
     private Sale BuildSaleSkeleton(SaleCreateVm vm, Guid stationId, string soldByUserId, string receiptNo)
@@ -601,12 +620,14 @@ public class SalesController : Controller
         return (true, null, mgr.Id);
     }
 
+
     [HttpGet]
     public async Task<IActionResult> Receipt(Guid id)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
         var sale = await _db.Sales.AsNoTracking()
+            .Include(s => s.Station)
             .Include(s => s.Station)
             .Include(s => s.Customer)
             .Include(s => s.Items).ThenInclude(i => i.Product)
@@ -618,69 +639,69 @@ public class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Export(string? quick = null, DateTime? startDate = null, DateTime? endDate = null)
+    public async Task<IActionResult> Export(string? quick = null, DateTime? startDate = null, DateTime? endDate = null, Guid? stationId = null)
     {
-        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
+        Guid? stationIdEffective = null;
+        if (IsAdminOverride())
+        {
+            stationIdEffective = stationId;
+        }
+        else
+        {
+            stationIdEffective = await _stationCtx.GetStationIdOrThrowAsync();
+        }
 
-        DateTime utcStart;
+        Station? station = null;
+        if (stationIdEffective.HasValue)
+        {
+            station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationIdEffective.Value);
+        }
+DateTime utcStart;
         DateTime utcEndExclusive;
-
-        // display dates (Nigeria local)
-        DateTime displayStartLocal;
-        DateTime displayEndLocal;
-
-        var todayLocal = BusinessTime.TodayLocalDate();
+        var now = DateTime.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(quick))
         {
             quick = quick.ToLowerInvariant();
             if (quick == "today")
             {
-                displayStartLocal = todayLocal;
-                displayEndLocal = todayLocal;
-                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
+                utcStart = now.Date;
+                utcEndExclusive = utcStart.AddDays(1);
             }
             else if (quick == "week")
             {
-                displayEndLocal = todayLocal;
-                displayStartLocal = todayLocal.AddDays(-6);
-                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
+                utcEndExclusive = now.Date.AddDays(1);
+                utcStart = utcEndExclusive.AddDays(-7);
             }
             else if (quick == "month")
             {
-                var localNow = BusinessTime.LocalNow();
-                var monthStartLocal = DateTime.SpecifyKind(new DateTime(localNow.Year, localNow.Month, 1), DateTimeKind.Unspecified);
-                var monthEndExclusiveLocal = monthStartLocal.AddMonths(1);
-
-                displayStartLocal = monthStartLocal;
-                displayEndLocal = monthEndExclusiveLocal.AddDays(-1);
-
-                utcStart = BusinessTime.ToUtc(monthStartLocal);
-                utcEndExclusive = BusinessTime.ToUtc(monthEndExclusiveLocal);
+                utcStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+                utcEndExclusive = utcStart.AddMonths(1);
             }
             else
             {
-                displayStartLocal = todayLocal;
-                displayEndLocal = todayLocal;
-                (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDate(todayLocal);
+                utcStart = now.Date;
+                utcEndExclusive = utcStart.AddDays(1);
             }
         }
         else
         {
-            displayStartLocal = AsDateOnly(startDate ?? todayLocal);
-            displayEndLocal = AsDateOnly(endDate ?? displayStartLocal);
+            var s = (startDate?.Date ?? now.Date);
+            var e = (endDate?.Date ?? s);
 
-            if (displayEndLocal < displayStartLocal)
-                displayEndLocal = displayStartLocal;
+            // IMPORTANT: mark as UTC so Npgsql accepts it for timestamptz comparisons
+            utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
+            utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
 
-            (utcStart, utcEndExclusive) = BusinessTime.UtcRangeForLocalDates(displayStartLocal, displayEndLocal);
+            if (utcEndExclusive < utcStart.AddDays(1))
+                utcEndExclusive = utcStart.AddDays(1);
         }
 
         var sales = await _db.Sales.AsNoTracking()
+            .Include(s => s.Station)
             .Include(s => s.Customer)
             .Include(s => s.Items).ThenInclude(i => i.Product)
-            .Where(s => s.StationId == stationId && s.CreatedAt >= utcStart && s.CreatedAt < utcEndExclusive)
+            .Where(s => (!stationIdEffective.HasValue || s.StationId == stationIdEffective.Value) && s.CreatedAt >= utcStart && s.CreatedAt < utcEndExclusive)
             .OrderBy(s => s.CreatedAt)
             .ToListAsync();
 
@@ -705,7 +726,7 @@ public class SalesController : Controller
         {
             foreach (var it in s.Items)
             {
-                ws.Cell(r, 1).Value = station.Name;
+                ws.Cell(r, 1).Value = s.Station?.Name ?? (station?.Name ?? "");
                 ws.Cell(r, 2).Value = s.ReceiptNo;
                 ws.Cell(r, 3).Value = s.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
                 ws.Cell(r, 4).Value = s.Customer?.Name ?? "Walk-in";
@@ -726,7 +747,8 @@ public class SalesController : Controller
         wb.SaveAs(ms);
         ms.Position = 0;
 
-        var fileName = $"Sales_{station.Name.Replace(" ", "_")}_{displayStartLocal:yyyyMMdd}_{displayEndLocal:yyyyMMdd}.xlsx";
+        var stationPart = station?.Name.Replace(" ", "_") ?? "All_Stations";
+        var fileName = $"Sales_{stationPart}_{utcStart:yyyyMMdd}_{utcEndExclusive.AddDays(-1):yyyyMMdd}.xlsx";
         return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 }

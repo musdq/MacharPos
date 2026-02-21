@@ -494,10 +494,11 @@ private static string MakeStationCode(string stationName)
     {
         var batch = await _db.LpgBatches
             .FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == LpgBatchStatus.Active);
-
+     
         if (batch is null)
             ModelState.AddModelError("", "No ACTIVE LPG batch for your station. Create and activate a batch before LPG refill sales.");
 
+      
         return batch;
     }
 

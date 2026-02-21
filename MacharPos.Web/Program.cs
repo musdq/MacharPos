@@ -1,6 +1,7 @@
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
+using MacharPos.Web.Services.HQ;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -102,6 +103,7 @@ builder.Services.ConfigureApplicationCookie(opt =>
 // --------------------
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IStationContext, StationContext>();
+builder.Services.AddScoped<IHqDashboardService, HqDashboardService>();
 
 var app = builder.Build();
 

@@ -1,5 +1,7 @@
 ﻿using MacharPos.Web.Data;
 using MacharPos.Web.Services;
+using MacharPos.Web.Services.HQ;
+using MacharPos.Web.Utils;
 using MacharPos.Web.ViewModels.Dashboard;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,11 +14,13 @@ namespace MacharPos.Web.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IStationContext _stationCtx;
+        private readonly IHqDashboardService _hq;
 
-        public DashboardController(AppDbContext db, IStationContext stationCtx)
+        public DashboardController(AppDbContext db, IStationContext stationCtx, IHqDashboardService hq)
         {
             _db = db;
             _stationCtx = stationCtx;
+            _hq = hq;
         }
 
 
@@ -107,6 +111,16 @@ namespace MacharPos.Web.Controllers
                 WeeklySales = weeklySales
             };
 
+            return View(vm);
+        }
+
+        [HttpGet("hq/dashboard")]
+        public async Task<IActionResult> HQIndex([FromQuery] DateTime? date = null)
+        {
+            // Phase 6.1 uses *business day* (Nigeria local date), consistent with Daily Close.
+            var reportDate = (date?.Date ?? BusinessTime.TodayLocalDate());
+
+            var vm = await _hq.BuildAsync(reportDate);
             return View(vm);
         }
 

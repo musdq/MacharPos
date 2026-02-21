@@ -135,3 +135,4 @@ using (var scope = app.Services.CreateScope())
 await SeedData.RunAsync(app);
 
 app.Run();
+public partial class Program { }

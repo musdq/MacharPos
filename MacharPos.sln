@@ -9,13 +9,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MacharPos.Core", "MacharPos
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MacharPos.Infrastructure", "MacharPos.Infrastructure\MacharPos.Infrastructure.csproj", "{91461200-A788-437A-B06F-A4CB919722CA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestProject", "TestProject\TestProject.csproj", "{39978C7F-24A9-4633-AF91-70AD8FA4DABE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{9F9C6125-2D12-47B8-B576-A9703404426E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -30,5 +29,15 @@ Global
 		{91461200-A788-437A-B06F-A4CB919722CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{91461200-A788-437A-B06F-A4CB919722CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{91461200-A788-437A-B06F-A4CB919722CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{39978C7F-24A9-4633-AF91-70AD8FA4DABE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{39978C7F-24A9-4633-AF91-70AD8FA4DABE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{39978C7F-24A9-4633-AF91-70AD8FA4DABE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{39978C7F-24A9-4633-AF91-70AD8FA4DABE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {60D631FC-161A-43E5-AD46-563A5EC6E7B1}
 	EndGlobalSection
 EndGlobal

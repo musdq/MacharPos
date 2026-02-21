@@ -113,6 +113,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
+    name: "hq-dashboard",
+    pattern: "hq/dashboard",
+    defaults: new { controller = "Dashboard", action = "HQIndex" });
+
+
+app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 

@@ -114,7 +114,8 @@ namespace MacharPos.Web.Controllers
             return View(vm);
         }
 
-        [HttpGet("hq/dashboard")]
+
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> HQIndex([FromQuery] DateTime? date = null)
         {
             // Phase 6.1 uses *business day* (Nigeria local date), consistent with Daily Close.

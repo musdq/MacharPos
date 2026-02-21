@@ -372,6 +372,12 @@ namespace MacharPos.Web.Migrations
                     b.Property<decimal>("LineTotal")
                         .HasColumnType("numeric");
 
+                    b.Property<decimal?>("TotalCostAtSale")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("UnitCostAtSale")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("LpgBatchId")
                         .HasColumnType("uuid");
 

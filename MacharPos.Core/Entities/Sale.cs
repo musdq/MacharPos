@@ -76,6 +76,10 @@ namespace MacharPos.Core.Entities
         public decimal UnitPrice { get; set; }
         public decimal LineTotal { get; set; }
 
+        // Phase 6.2 (Margin Engine): stamp cost at time of sale
+        public decimal? UnitCostAtSale { get; set; }
+        public decimal? TotalCostAtSale { get; set; }
+
         // For LPG refill lines only:
         public Guid? LpgBatchId { get; set; }
         public LpgBatch? LpgBatch { get; set; }

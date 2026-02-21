@@ -7,6 +7,11 @@ public class HqDashboardVm
     // Headline totals (all stations)
     public decimal TotalSalesAmount { get; set; }
 
+    // Phase 6.2 (Margin Engine)
+    public decimal TotalCostAmount { get; set; }
+    public decimal GrossProfitAmount { get; set; }
+    public decimal GrossMarginPercent { get; set; }
+
     public decimal CashAmount { get; set; }
     public decimal PosAmount { get; set; }
     public decimal TransferAmount { get; set; }
@@ -28,6 +33,11 @@ public class StationKpiRow
     public string StationName { get; set; } = "";
 
     public decimal SalesAmount { get; set; }
+
+    // Phase 6.2 (Margin Engine)
+    public decimal CostAmount { get; set; }
+    public decimal GrossProfitAmount { get; set; }
+    public decimal GrossMarginPercent { get; set; }
     public decimal CashAmount { get; set; }
     public decimal PosAmount { get; set; }
     public decimal TransferAmount { get; set; }

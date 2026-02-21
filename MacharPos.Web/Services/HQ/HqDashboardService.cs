@@ -65,6 +65,21 @@ public class HqDashboardService : IHqDashboardService
             })
             .ToListAsync();
 
+
+        // Phase 6.2: Cost + Gross Profit (uses SaleItem.TotalCostAtSale, stamped at time of sale)
+        var costByStation = await _db.SaleItems.AsNoTracking()
+            .Join(
+                salesQ,
+                i => i.SaleId,
+                s => s.Id,
+                (i, s) => new { s.StationId, Cost = (i.TotalCostAtSale ?? 0m) }
+            )
+            .GroupBy(x => x.StationId)
+            .Select(g => new { StationId = g.Key, Cost = g.Sum(x => x.Cost) })
+            .ToListAsync();
+
+        var totalCost = costByStation.Sum(x => x.Cost);
+
         // LPG kg sold (based on SaleItem.LpgKg)
         // We join against Sales to re-use the day filter safely.
         var lpgByStation = await _db.SaleItems.AsNoTracking()
@@ -152,6 +167,8 @@ public class HqDashboardService : IHqDashboardService
         {
             var stTotals = stationTotals.FirstOrDefault(x => x.StationId == st.Id);
             var stLpg = lpgByStation.FirstOrDefault(x => x.StationId == st.Id);
+            var stCost = costByStation.FirstOrDefault(x => x.StationId == st.Id);
+
 
             stationRows.Add(new StationKpiRow
             {
@@ -163,6 +180,10 @@ public class HqDashboardService : IHqDashboardService
                 PosAmount = stTotals?.Pos ?? 0m,
                 TransferAmount = stTotals?.Transfer ?? 0m,
                 CreditAmount = stTotals?.Credit ?? 0m,
+
+                CostAmount = stCost?.Cost ?? 0m,
+                GrossProfitAmount = (stTotals?.Total ?? 0m) - (stCost?.Cost ?? 0m),
+                GrossMarginPercent = ((stTotals?.Total ?? 0m) > 0m) ? (((stTotals?.Total ?? 0m) - (stCost?.Cost ?? 0m)) / (stTotals?.Total ?? 0m) * 100m) : 0m,
 
                 LpgKgSold = stLpg?.Kg ?? 0m,
                 PmsLitresSold = pmsByStation.GetValueOrDefault(st.Id),
@@ -178,6 +199,11 @@ public class HqDashboardService : IHqDashboardService
             PosAmount = totals.Pos,
             TransferAmount = totals.Transfer,
             CreditAmount = totals.Credit,
+
+            TotalCostAmount = totalCost,
+            GrossProfitAmount = totals.Total - totalCost,
+            GrossMarginPercent = (totals.Total > 0m) ? ((totals.Total - totalCost) / totals.Total * 100m) : 0m,
+
             LpgKgSold = totalLpgKg,
             PmsLitresSold = totalPms,
             AgoLitresSold = totalAgo,

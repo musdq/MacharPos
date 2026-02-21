@@ -50,9 +50,38 @@
             </div>
         </div>
     </div>
+
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">Total Cost (Known)</div>
+                <div class="fs-4 fw-semibold">₦@Model.TotalCostAmount.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">Gross Profit (Known)</div>
+                <div class="fs-4 fw-semibold">₦@Model.GrossProfitAmount.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">Gross Margin (Known)</div>
+                <div class="fs-4 fw-semibold">@Model.GrossMarginPercent.ToString("N2")%</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="row g-3 mb-4">
+
     <div class="col-md-3">
         <div class="card shadow-sm">
             <div class="card-body">
@@ -69,7 +98,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+@*     <div class="col-md-3">
         <div class="card shadow-sm">
             <div class="card-body">
                 <div class="text-secondary small">PMS Sold</div>
@@ -84,7 +113,7 @@
                 <div class="fs-4 fw-semibold">@Model.AgoLitresSold.ToString("N2") <span class="fs-6 text-secondary">L</span></div>
             </div>
         </div>
-    </div>
+    </div> *@
 </div>
 
 <div class="card shadow-sm mb-4">
@@ -103,9 +132,12 @@
                         <th class="text-end">POS (₦)</th>
                         <th class="text-end">Transfer (₦)</th>
                         <th class="text-end">Credit (₦)</th>
+                        <th class="text-end">Cost (₦)</th>
+                        <th class="text-end">Gross Profit (₦)</th>
+                        <th class="text-end">Margin (%)</th>
                         <th class="text-end">LPG (kg)</th>
-                        <th class="text-end">PMS (L)</th>
-                        <th class="text-end">AGO (L)</th>
+@*                         <th class="text-end">PMS (L)</th>
+                        <th class="text-end">AGO (L)</th> *@
                     </tr>
                 </thead>
                 <tbody>
@@ -118,9 +150,12 @@
                         <td class="text-end">₦@s.PosAmount.ToString("N0")</td>
                         <td class="text-end">₦@s.TransferAmount.ToString("N0")</td>
                         <td class="text-end">₦@s.CreditAmount.ToString("N0")</td>
+                        <td class="text-end">₦@s.CostAmount.ToString("N0")</td>
+                        <td class="text-end">₦@s.GrossProfitAmount.ToString("N0")</td>
+                        <td class="text-end">@s.GrossMarginPercent.ToString("N2")%</td>
                         <td class="text-end">@s.LpgKgSold.ToString("N2")</td>
-                        <td class="text-end">@s.PmsLitresSold.ToString("N2")</td>
-                        <td class="text-end">@s.AgoLitresSold.ToString("N2")</td>
+@*                         <td class="text-end">@s.PmsLitresSold.ToString("N2")</td>
+                        <td class="text-end">@s.AgoLitresSold.ToString("N2")</td> *@
                     </tr>
                 }
                 </tbody>

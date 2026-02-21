@@ -238,6 +238,13 @@ var user = await _users.GetUserAsync(User);
                 var lpgKg = qty * eqKg;
                 item.LpgBatchId = activeBatch.Id;
                 item.LpgKg = lpgKg;
+
+                // Phase 6.2: stamp LPG cost at time of sale (for stable margins later)
+                if (activeBatch.CostPerKg.HasValue)
+                {
+                    item.UnitCostAtSale = activeBatch.CostPerKg.Value;
+                    item.TotalCostAtSale = lpgKg * activeBatch.CostPerKg.Value;
+                }
                 totalLpgKg += lpgKg;
             }
 

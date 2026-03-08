@@ -8,101 +8,125 @@
 }
 
 <div class="d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h1 class="h5 mb-0">LPG Batches</h1>
-    <div class="text-secondary small">Station: <span class="fw-semibold">@stationName</span></div>
-  </div>
+    <div>
+        <h1 class="h5 mb-0">LPG Batches</h1>
+        <div class="text-secondary small">Station: <span class="fw-semibold">@stationName</span></div>
+    </div>
 
-  @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
-  {
-    <a class="btn btn-dark btn-sm" asp-action="Create">New Batch</a>
-  }
+    @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
+    {
+        <a class="btn btn-dark btn-sm" asp-action="Create">New Batch</a>
+    }
 </div>
 
-@if (TempData["Ok"] is string ok) { <div class="alert alert-success">@ok</div> }
-@if (TempData["Err"] is string err) { <div class="alert alert-danger">@err</div> }
+@if (TempData["Ok"] is string ok)
+{
+    <div class="alert alert-success">@ok</div>
+}
+@if (TempData["Err"] is string err)
+{
+    <div class="alert alert-danger">@err</div>
+}
 
 <div class="row g-3">
-  <div class="col-12 col-lg-4">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="text-secondary small">Active Batch</div>
-        @if (active is null)
-        {
-          <div class="fw-semibold mt-1">None</div>
-          <div class="small text-secondary">Create a batch and activate it before sales.</div>
-        }
-        else
-        {
-          <div class="fw-semibold mt-1">@active.BatchNo</div>
-          <div class="small text-secondary">Received: @active.QuantityKg.ToString("N0") kg</div>
-          <div class="small text-secondary">Sold: @active.SoldKg.ToString("N0") kg</div>
-          <div class="small text-secondary">Remaining: @active.RemainingKg.ToString("N0") kg</div>
-        }
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-lg-8">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-sm align-middle">
-            <thead>
-              <tr>
-                <th>Batch No</th>
-                <th>Date</th>
-                <th class="text-end">Received (kg)</th>
-                <th class="text-end">Sold (kg)</th>
-                <th class="text-end">Remaining (kg)</th>
-                <th>Status</th>
-                <th class="text-end"></th>
-              </tr>
-            </thead>
-            <tbody>
-              @foreach (var b in Model)
-              {
-                <tr>
-                  <td class="fw-semibold">@b.BatchNo</td>
-                  <td>@b.DateReceived.ToString("yyyy-MM-dd")</td>
-                  <td class="text-end">@b.QuantityKg.ToString("N0")</td>
-                  <td class="text-end">@b.SoldKg.ToString("N0")</td>
-                  <td class="text-end">@b.RemainingKg.ToString("N0")</td>
-                  <td>
-                    @if (b.Status == LpgBatchStatus.Active) { <span class="badge text-bg-success">Active</span> }
-                    else if (b.Status == LpgBatchStatus.Closed) { <span class="badge text-bg-secondary">Closed</span> }
-                    else { <span class="badge text-bg-warning">Draft</span> }
-                  </td>
-                  <td class="text-end">
-                    @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
-                    {
-                      <div class="d-flex justify-content-end gap-2">
-                        @if (b.Status != LpgBatchStatus.Active && b.Status != LpgBatchStatus.Closed)
-                        {
-                          <form asp-action="Activate" method="post" class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="id" value="@b.Id" />
-                            <button class="btn btn-outline-success btn-sm">Activate</button>
-                          </form>
-                        }
-
-                        @if (b.Status == LpgBatchStatus.Active)
-                        {
-                          <form asp-action="Close" method="post" class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="id" value="@b.Id" />
-                            <button class="btn btn-outline-danger btn-sm">Close</button>
-                          </form>
-                        }
-                      </div>
-                    }
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-secondary small">Active Batch</div>
+                @if (active is null)
+                {
+                    <div class="fw-semibold mt-1">None</div>
+                    <div class="small text-secondary">Create a batch and activate it before sales.</div>
+                }
+                else
+                {
+                    <div class="fw-semibold mt-1">@active.BatchNo</div>
+                    <div class="small text-secondary">Received: @active.QuantityKg.ToString("N0") kg</div>
+                    <div class="small text-secondary">Sold: @active.SoldKg.ToString("N0") kg</div>
+                    <div class="small text-secondary">Remaining: @active.RemainingKg.ToString("N0") kg</div>
+                }
+            </div>
         </div>
-      </div>
     </div>
-  </div>
+
+    <div class="col-12 col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Batch No</th>
+                                <th>Date</th>
+                                <th class="text-end">Received (kg)</th>
+                                <th class="text-end">Sold (kg)</th>
+                                <th class="text-end">Remaining (kg)</th>
+                                <th>Status</th>
+                                <th class="text-end"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var b in Model)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@b.BatchNo</td>
+                                    <td>@b.DateReceived.ToString("yyyy-MM-dd")</td>
+                                    <td class="text-end">@b.QuantityKg.ToString("N0")</td>
+                                    <td class="text-end">@b.SoldKg.ToString("N0")</td>
+                                    <td class="text-end">@b.RemainingKg.ToString("N0")</td>
+                                    <td>
+                                        @if (b.Status == LpgBatchStatus.Active)
+                                        {
+                                            <span class="badge text-bg-success">Active</span>
+                                        }
+                                        else if (b.Status == LpgBatchStatus.Closed)
+                                        {
+
+                                            <span class="badge text-bg-secondary">Closed</span>
+                                        }
+                                        else
+                                        {
+
+                                            <span class="badge text-bg-warning">Draft</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-flex justify-content-end gap-2">
+
+                                            <a asp-action="Details" asp-route-id="@b.Id"
+                                               class="btn btn-outline-primary btn-sm">
+                                                Details
+                                            </a>
+
+                                            @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
+                                            {
+                                                @if (b.Status != LpgBatchStatus.Active && b.Status != LpgBatchStatus.Closed)
+                                                {
+                                                    <form asp-action="Activate" method="post" class="d-inline">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="id" value="@b.Id" />
+                                                        <button class="btn btn-outline-success btn-sm">Activate</button>
+                                                    </form>
+                                                }
+
+                                                @if (b.Status == LpgBatchStatus.Active)
+                                                {
+                                                    <form asp-action="Close" method="post" class="d-inline">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="id" value="@b.Id" />
+                                                        <button class="btn btn-outline-danger btn-sm">Close</button>
+                                                    </form>
+                                                }
+                                            }
+
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>

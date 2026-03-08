@@ -3,6 +3,7 @@
     ViewData["Title"] = "Receipt";
 }
 
+
 <div class="no-print d-flex align-items-center justify-content-between mb-3">
   <div>
     <h1 class="h5 mb-0">Receipt</h1>
@@ -10,6 +11,7 @@
   </div>
   <div class="d-flex gap-2">
     <button class="btn btn-dark btn-sm" onclick="window.print()">Print</button>
+    <button class="btn btn-primary btn-sm" type="button" onclick="qzPlainTest()">Print (Thermal)</button>
     <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back to Sales</a>
   </div>
 </div>
@@ -79,3 +81,144 @@
     <div class="text-center small text-secondary mt-2">Thank you!</div>
   </div>
 </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
+
+<script>
+  // Change this to the EXACT printer name you see in Windows (Devices & Printers)
+  const THERMAL_PRINTER_NAME = "XP-80C";
+
+  function escInit() { return '\x1B\x40'; }
+  function escAlign(n) { return '\x1B\x61' + String.fromCharCode(n); }
+  function escBold(on) { return '\x1B\x45' + (on ? '\x01' : '\x00'); }
+  function escCut() { return '\x1B\x69'; }   
+  function escLF(lines=1){ return '\n'.repeat(lines); }
+
+  const LINE_WIDTH = 42;
+  function padRight(s, w) { s = (s ?? "").toString(); return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length); }
+  function padLeft(s, w) { s = (s ?? "").toString(); return s.length >= w ? s.slice(0, w) : " ".repeat(w - s.length) + s; }
+  function money(n){ return "₦" + (Number(n)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function hr(){ return "-".repeat(LINE_WIDTH) + "\n"; }
+
+  function buildReceiptText(sale){
+    let out = "";
+    out += escInit();
+    out += escAlign(1);
+    out += escBold(true) + (sale.stationName || "Machar Station") + "\n" + escBold(false);
+    out += "Machar POS Receipt\n";
+    if (sale.status === "Voided") out += "*** VOID ***\n";
+    out += escAlign(0);
+    out += hr();
+
+    out += `Receipt: ${sale.receiptNo}\n`;
+    out += `Date:    ${sale.createdAtLocal}\n`;
+    out += `Customer:${sale.customerName}\n`;
+    out += `Payment: ${sale.paymentMethod}\n`;
+    out += hr();
+
+    // Items
+    for (const it of sale.items){
+      const name = it.name || "Item";
+      const total = money(it.lineTotal);
+      out += padRight(name, LINE_WIDTH - total.length) + total + "\n";
+      out += `  ${Number(it.qty).toFixed(2)} x ${money(it.unitPrice)}\n`;
+    }
+
+    out += hr();
+    out += padRight("Subtotal", LINE_WIDTH - money(sale.subtotal).length) + money(sale.subtotal) + "\n";
+    if (sale.discountAmount > 0){
+      const disc = "- " + money(sale.discountAmount);
+      out += padRight("Discount", LINE_WIDTH - disc.length) + disc + "\n";
+    }
+    out += padRight("TOTAL", LINE_WIDTH - money(sale.total).length) + money(sale.total) + "\n";
+
+    out += escAlign(1);
+    out += escLF(1) + "Thank you!\n";
+    out += escLF(3);
+    out += escCut();
+    return out;
+  }
+
+  function money(n){ 
+  return "NGN " + (Number(n)||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); 
+}
+
+async function qzPlainTest() {
+  await qz.websocket.connect();
+
+  const cfg = qz.configs.create("XP-80C");
+const cutPartial = "\x1D\x56\x01";
+ const feed5 = "\x1B\x64\x05";   
+
+  // IMPORTANT: Avoid ₦ for now (many printers drop it). Use NGN.
+  const receipt =
+    "MACHAR OIL & GAS LTD\r\n" +
+    "Machar POS Receipt\r\n" +
+    "------------------------------------------\r\n" +
+    "Receipt: 12345\r\n" +
+    "Date:    2026-03-04 09:12\r\n" +
+    "Customer: Walk-in\r\n" +
+    "Payment: Cash\r\n" +
+    "------------------------------------------\r\n" +
+    "LPG Refill                     NGN 13,125.00\r\n" +
+    "  12.50 x NGN 1,050.00\r\n" +
+    "------------------------------------------\r\n" +
+    "TOTAL                          NGN 13,125.00\r\n" +
+    "\r\n" +
+    "Thank you!\r\n\r\n\r\n";
+
+  await qz.print(cfg, [{
+    type: 'raw',
+    format: 'plain',
+data: receipt + feed5 + cutPartial
+  }]);
+}
+
+  async function printThermal(){
+    // Build sale data from Razor model into JS (safe minimal fields)
+    const sale = {
+      receiptNo: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ReceiptNo)),
+      stationName: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Station?.Name)),
+      status: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Status.ToString())),
+      createdAtLocal: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))),
+      customerName: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Customer?.Name ?? "Walk-in")),
+      paymentMethod: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PaymentMethod.ToString())),
+      subtotal: @Model.Subtotal,
+      discountAmount: @Model.DiscountAmount,
+      total: @Model.Total,
+      items: [
+        @Html.Raw(string.Join(",",
+          Model.Items.Select(it =>
+            System.Text.Json.JsonSerializer.Serialize(new {
+              name = it.Product?.Name,
+              qty = it.Qty,
+              unitPrice = it.UnitPrice,
+              lineTotal = it.LineTotal
+            })
+          )
+        ))
+      ]
+    };
+
+    try {
+      if (!qz.websocket.isActive()) {
+      await qz.websocket.connect();
+        console.log(await qz.printers.find());
+      }
+
+      // Choose the exact printer
+      const config = qz.configs.create(THERMAL_PRINTER_NAME, {
+        // Optional: add per-job options here if needed
+      });
+
+      const raw = buildReceiptText(sale);
+
+      // QZ expects an array; send a single RAW payload
+      await qz.print(config, [{ type: 'raw', format: 'plain', data: raw }]);
+    } catch (e) {
+      alert("Thermal print failed: " + (e.message || e));
+      console.error(e);
+    }
+  }
+</script>

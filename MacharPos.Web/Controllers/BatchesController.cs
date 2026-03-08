@@ -1,6 +1,8 @@
+using DocumentFormat.OpenXml.InkML;
 using MacharPos.Core.Entities;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
+using MacharPos.Web.ViewModels.Batches;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -132,5 +134,49 @@ public class BatchesController : Controller
 
         TempData["Ok"] = $"Batch {batch.BatchNo} closed.";
         return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Details(Guid id, int page = 1, int pageSize = 20)
+    {
+        var batch = await _db.LpgBatches
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (batch == null)
+            return NotFound();
+
+        var query = _db.SaleItems
+            .Include(x => x.Sale)
+            .Where(x => x.LpgBatchId == id);
+
+        var totalSales = await query.SumAsync(x => x.LineTotal);
+        var totalCost = await query.SumAsync(x => x.TotalCostAtSale ?? 0);
+        var totalKgSold = await query.SumAsync(x => x.LpgKg ?? 0);
+        var totalCylinders = await query.CountAsync();
+
+        var totalItems = await query.CountAsync();
+
+        var sales = await query
+            .OrderByDescending(x => x.Sale.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var vm = new BatchDetailsVM
+        {
+            Batch = batch,
+            Sales = sales,
+
+            TotalKgSold = totalKgSold,
+            TotalSalesAmount = totalSales,
+            TotalCost = totalCost,
+            GrossProfit = totalSales - totalCost,
+            TotalCylindersSold = totalCylinders,
+
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalItems
+        };
+
+        return View(vm);
     }
 }

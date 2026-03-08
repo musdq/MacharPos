@@ -1,0 +1,171 @@
+﻿@using MacharPos.Web.ViewModels.Batches
+@model BatchDetailsVM
+
+<div class="container">
+
+    <h2>Batch Details</h2>
+
+    <div class="card mb-4">
+        <div class="card-body">
+
+            <div class="row">
+
+                <div class="col-md-4">
+                    <strong>Batch No:</strong> @Model.Batch.BatchNo
+                </div>
+
+                <div class="col-md-4">
+                    <strong>Status:</strong> @Model.Batch.Status
+                </div>
+
+                <div class="col-md-4">
+                    <strong>Date Received:</strong> @Model.Batch.DateReceived.ToShortDateString()
+                </div>
+
+            </div>
+
+            <div class="row mt-3">
+
+                <div class="col-md-3">
+                    <strong>Total KG:</strong> @Model.Batch.QuantityKg
+                </div>
+
+                <div class="col-md-3">
+                    <strong>KG Sold:</strong> @Model.TotalKgSold
+                </div>
+
+                <div class="col-md-3">
+                    <strong>KG Remaining:</strong> @(Model.Batch.QuantityKg - Model.TotalKgSold)
+                </div>
+
+                <div class="col-md-3">
+                    <strong>Cost Per KG:</strong> ₦@Model.Batch.CostPerKg
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+    <div class="row text-center mb-4">
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6>Total Sales</h6>
+                    <h4>₦@Model.TotalSalesAmount.ToString("N2")</h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6>Total Cylinders Sold</h6>
+                    <h4>@Model.TotalCylindersSold</h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6>Total Cost</h6>
+                    <h4>₦@Model.TotalCost.ToString("N2")</h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6>Gross Profit</h6>
+                    <h4 class="text-success">
+                        ₦@Model.GrossProfit.ToString("N2")
+                    </h4>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <div class="card">
+
+        <div class="card-header">
+            <h5>Sales Under Batch</h5>
+        </div>
+
+        <div class="card-body">
+
+            <table class="table table-striped">
+
+                <thead>
+                    <tr>
+                        <th>Receipt</th>
+                        <th>Date</th>
+                        <th>Kg</th>
+                        <th>Unit Price</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    @foreach (var sale in Model.Sales)
+                    {
+                        <tr>
+
+                            <td>@sale.Sale.ReceiptNo</td>
+
+                            <td>
+                                @sale.Sale.CreatedAt.ToString("dd MMM yyyy HH:mm")
+                            </td>
+
+                            <td>@sale.LpgKg</td>
+
+                            <td>₦@sale.UnitPrice</td>
+
+                            <td>₦@sale.LineTotal</td>
+
+                        </tr>
+                    }
+
+                </tbody>
+
+            </table>
+            <nav>
+
+                <ul class="pagination">
+
+                    @if (Model.Page > 1)
+                    {
+                        <li class="page-item">
+                            <a class="page-link"
+                               href="?page=@(Model.Page - 1)">Previous</a>
+                        </li>
+                    }
+
+                    @for (int i = 1; i <= Model.TotalPages; i++)
+                    {
+                        <li class="page-item @(i == Model.Page ? "active" : "")">
+
+                            <a class="page-link"
+                               href="?page=@i">@i</a>
+
+                        </li>
+                    }
+
+                    @if (Model.Page < Model.TotalPages)
+                    {
+                        <li class="page-item">
+                            <a class="page-link"
+                               href="?page=@(Model.Page + 1)">Next</a>
+                        </li>
+                    }
+
+                </ul>
+
+            </nav>
+
+        </div>
+    </div>
+
+</div>

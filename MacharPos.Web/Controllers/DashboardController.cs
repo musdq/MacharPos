@@ -1,4 +1,5 @@
-﻿using MacharPos.Web.Data;
+﻿using DocumentFormat.OpenXml.InkML;
+using MacharPos.Web.Data;
 using MacharPos.Web.Services;
 using MacharPos.Web.Services.HQ;
 using MacharPos.Web.Utils;
@@ -66,6 +67,11 @@ namespace MacharPos.Web.Controllers
             var activeBatch = await _db.LpgBatches.AsNoTracking()
                 .FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == MacharPos.Core.Entities.LpgBatchStatus.Active);
 
+            //kpi cylinders
+            var cylindersSoldToday = await _db.SaleItems
+                                .Where(s => s.Sale.CreatedAt >= todayStart && s.Sale.CreatedAt < todayEnd)
+                                .SumAsync(x => x.Qty);
+
             var remainingKg = activeBatch?.RemainingKg ?? 0m;
 
             // MONTHLY BAR (days of current month)
@@ -103,6 +109,7 @@ namespace MacharPos.Web.Controllers
                 TodaySales = todaySales,                 // ADD this property in VM
                 LpgKgSoldThisMonth = lpgKgSoldThisMonth,
                 ActiveBatchRemainingKg = remainingKg,
+                LpgCylindersSoldThisMonth = (int)cylindersSoldToday, // For simplicity, using today's cylinders as monthly. Adjust as needed.
 
                 MonthlyLabels = monthlyLabels,
                 MonthlySales = monthlySales,

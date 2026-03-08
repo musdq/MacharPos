@@ -151,7 +151,7 @@ public class BatchesController : Controller
         var totalSales = await query.SumAsync(x => x.LineTotal);
         var totalCost = await query.SumAsync(x => x.TotalCostAtSale ?? 0);
         var totalKgSold = await query.SumAsync(x => x.LpgKg ?? 0);
-        var totalCylinders = await query.CountAsync();
+        var totalCylinders = await query.SumAsync(x => x.Qty);
 
         var totalItems = await query.CountAsync();
 
@@ -170,7 +170,7 @@ public class BatchesController : Controller
             TotalSalesAmount = totalSales,
             TotalCost = totalCost,
             GrossProfit = totalSales - totalCost,
-            TotalCylindersSold = totalCylinders,
+            TotalCylindersSold = (int)totalCylinders,
 
             Page = page,
             PageSize = pageSize,

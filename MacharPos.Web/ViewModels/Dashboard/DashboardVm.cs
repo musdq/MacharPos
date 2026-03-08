@@ -8,6 +8,8 @@
         public decimal LpgKgSoldThisMonth { get; set; }
         public decimal ActiveBatchRemainingKg { get; set; }
 
+        public int LpgCylindersSoldThisMonth { get; set; }
+
         // Chart data (labels + values)
         public List<string> MonthlyLabels { get; set; } = new();
         public List<decimal> MonthlySales { get; set; } = new();

@@ -1,7 +1,9 @@
 ﻿using ClosedXML.Excel;
+using DocumentFormat.OpenXml.InkML;
 using MacharPos.Core.Entities;
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
+using MacharPos.Web.DTO;
 using MacharPos.Web.Services;
 using MacharPos.Web.ViewModels.Sales;
 using Microsoft.AspNetCore.Authorization;
@@ -11,6 +13,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
+using System.Text.Json;
 
 namespace MacharPos.Web.Controllers;
 
@@ -406,6 +409,30 @@ private static string MakeStationCode(string stationName)
             }
 
             _db.Sales.Add(sale);
+            var dto = new SaleSyncDto
+            {
+                Id = sale.Id,
+                Date = sale.CreatedAt,
+                TotalAmount = sale.Total,
+                Items = sale.Items.Select(i => new SaleItemSyncDto
+                {
+                    Id = i.Id,
+                    ProductId = i.ProductId,
+                    Cylinders = (int)i.Qty,
+                    Kg = (decimal)i.LpgKg,
+                    Price = i.UnitPrice
+                }).ToList()
+            };
+
+            _db.SyncQueue.Add(new SyncQueueItem
+            {
+                EntityType = "Sale",
+                EntityId = sale.Id,
+                PayloadJson = JsonSerializer.Serialize(dto),
+                Synced = false
+            });
+
+
             await _db.SaveChangesAsync();
 
             if (activeBatch is not null && build.TotalLpgKg > 0m)
@@ -415,6 +442,7 @@ private static string MakeStationCode(string stationName)
             }
 
             await tx.CommitAsync();
+
             return RedirectToAction(nameof(Receipt), new { id = sale.Id });
         }
         catch

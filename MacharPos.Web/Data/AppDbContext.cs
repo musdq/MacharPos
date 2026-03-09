@@ -27,6 +27,8 @@ namespace MacharPos.Web.Data
         // Phase 2
         public DbSet<ShiftClose> ShiftCloses => Set<ShiftClose>();
 
+        public DbSet<SyncQueueItem> SyncQueue => Set<SyncQueueItem>();
+
 
 
         protected override void OnModelCreating(ModelBuilder b)

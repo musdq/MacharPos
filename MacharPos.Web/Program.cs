@@ -1,3 +1,4 @@
+using MacharPos.Infrastructure.Sync;
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
@@ -9,6 +10,8 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddHttpClient();
+builder.Services.AddHostedService<SyncService>();
 
 // --------------------
 // Database connection

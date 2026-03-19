@@ -372,12 +372,6 @@ namespace MacharPos.Web.Migrations
                     b.Property<decimal>("LineTotal")
                         .HasColumnType("numeric");
 
-                    b.Property<decimal?>("TotalCostAtSale")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("UnitCostAtSale")
-                        .HasColumnType("numeric");
-
                     b.Property<Guid?>("LpgBatchId")
                         .HasColumnType("uuid");
 
@@ -392,6 +386,12 @@ namespace MacharPos.Web.Migrations
 
                     b.Property<Guid>("SaleId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal?>("TotalCostAtSale")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("UnitCostAtSale")
+                        .HasColumnType("numeric");
 
                     b.Property<decimal>("UnitPrice")
                         .HasColumnType("numeric");
@@ -498,6 +498,40 @@ namespace MacharPos.Web.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Stations");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.SyncQueueItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("OperationType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Synced")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SyncQueue");
                 });
 
             modelBuilder.Entity("MacharPos.Web.Auth.ApplicationUser", b =>

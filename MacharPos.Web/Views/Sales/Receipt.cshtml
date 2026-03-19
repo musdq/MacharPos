@@ -11,7 +11,7 @@
   </div>
   <div class="d-flex gap-2">
     <button class="btn btn-dark btn-sm" onclick="window.print()">Print</button>
-    <button class="btn btn-primary btn-sm" type="button" onclick="qzPlainTest()">Print (Thermal)</button>
+    <button class="btn btn-primary btn-sm" type="button" onclick="printThermal()">Print (Thermal)</button>
     <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back to Sales</a>
   </div>
 </div>
@@ -89,11 +89,13 @@
   // Change this to the EXACT printer name you see in Windows (Devices & Printers)
   const THERMAL_PRINTER_NAME = "XP-80C";
 
-  function escInit() { return '\x1B\x40'; }
+ function escInit() { return '\x1B\x40'; }
   function escAlign(n) { return '\x1B\x61' + String.fromCharCode(n); }
   function escBold(on) { return '\x1B\x45' + (on ? '\x01' : '\x00'); }
-  function escCut() { return '\x1B\x69'; }   
-  function escLF(lines=1){ return '\n'.repeat(lines); }
+  function escLF(lines = 1) { return '\n'.repeat(lines); }
+
+  const cutPartial = "\x1D\x56\x01";
+  const feed5 = "\x1B\x64\x05";
 
   const LINE_WIDTH = 42;
   function padRight(s, w) { s = (s ?? "").toString(); return s.length >= w ? s.slice(0, w) : s + " ".repeat(w - s.length); }
@@ -132,11 +134,13 @@
       out += padRight("Discount", LINE_WIDTH - disc.length) + disc + "\n";
     }
     out += padRight("TOTAL", LINE_WIDTH - money(sale.total).length) + money(sale.total) + "\n";
-
-    out += escAlign(1);
-    out += escLF(1) + "Thank you!\n";
+ out += escAlign(1);
+    out += escLF(1);
+    out += "Thank you!\n";
     out += escLF(3);
-    out += escCut();
+
+    out += feed5;
+    out += cutPartial;
     return out;
   }
 
@@ -215,7 +219,13 @@ data: receipt + feed5 + cutPartial
       const raw = buildReceiptText(sale);
 
       // QZ expects an array; send a single RAW payload
-      await qz.print(config, [{ type: 'raw', format: 'plain', data: raw }]);
+   for (let i = 0; i < 2; i++) {
+  await qz.print(config, [{
+    type: 'raw',
+    format: 'plain',
+    data: raw
+  }]);
+}
     } catch (e) {
       alert("Thermal print failed: " + (e.message || e));
       console.error(e);

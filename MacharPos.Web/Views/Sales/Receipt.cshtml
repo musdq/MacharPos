@@ -5,13 +5,12 @@
 
 
 <div class="no-print d-flex align-items-center justify-content-between mb-3">
-  <div>
+@*   <div>
     <h1 class="h5 mb-0">Receipt</h1>
     <div class="text-secondary small">@Model.ReceiptNo</div>
-  </div>
+  </div> *@
   <div class="d-flex gap-2">
-    <button class="btn btn-dark btn-sm" onclick="window.print()">Print</button>
-    <button class="btn btn-primary btn-sm" type="button" onclick="printThermal()">Print (Thermal)</button>
+    <button class="btn btn-primary btn-sm" type="button" onclick="printThermal()">Print</button>
     <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back to Sales</a>
   </div>
 </div>
@@ -83,7 +82,27 @@
 </div>
 
 
-    <script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
+
+<script>
+qz.security.setCertificatePromise(function(resolve, reject) {
+    fetch("/qz/digital-certificate.txt")
+        .then(res => res.text())
+        .then(resolve)
+        .catch(reject);
+});
+
+qz.security.setSignatureAlgorithm("SHA512");
+
+qz.security.setSignaturePromise(function(toSign) {
+    return function(resolve, reject) {
+        fetch("/qz/sign?request=" + encodeURIComponent(toSign))
+            .then(res => res.text())
+            .then(resolve)
+            .catch(reject);
+    };
+});
+</script>
 
 <script>
   // Change this to the EXACT printer name you see in Windows (Devices & Printers)

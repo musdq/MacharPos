@@ -1,3 +1,4 @@
+using MacharPos.Core.Entities;
 using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.ViewModels.Admin;
@@ -181,5 +182,59 @@ public class AdminController : Controller
             });
         }
         return rows;
+    }
+
+    [HttpGet]
+    public IActionResult FreshStart()
+    {
+        ViewBag.DatabaseName = _db.Database.GetDbConnection().Database;
+        return View();
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> FreshStart(string confirmationText)
+    {
+        if (confirmationText?.Trim() != "START FRESH")
+        {
+            TempData["Err"] = "Reset cancelled. Type START FRESH exactly.";
+            return RedirectToAction(nameof(FreshStart));
+        }
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        try
+        {
+            await _db.SaleItems.ExecuteDeleteAsync();
+            await _db.CreditPayments.ExecuteDeleteAsync();
+            await _db.DailyCloses.ExecuteDeleteAsync();
+            await _db.ShiftCloses.ExecuteDeleteAsync();
+            await _db.SyncQueue.ExecuteDeleteAsync();
+            await _db.Sales.ExecuteDeleteAsync();
+            await _db.LpgBatches.ExecuteDeleteAsync();
+            await _db.Customers.ExecuteDeleteAsync();
+
+            var stations = await _db.Stations.ToListAsync();
+            foreach (var st in stations)
+            {
+                _db.Customers.Add(new Customer
+                {
+                    StationId = st.Id,
+                    Name = "Walk-in"
+                });
+            }
+
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            TempData["Ok"] = "Fresh start completed successfully.";
+            return RedirectToAction(nameof(FreshStart));
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            TempData["Err"] = $"Fresh start failed: {ex.Message}";
+            return RedirectToAction(nameof(FreshStart));
+        }
     }
 }

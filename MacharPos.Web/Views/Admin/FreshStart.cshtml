@@ -1,0 +1,71 @@
+﻿@{
+    ViewData["Title"] = "Fresh Start";
+}
+
+<div class="container mt-4">
+    <div class="card border-danger shadow-sm">
+        <div class="card-header bg-danger text-white">
+            <h4 class="mb-0">Fresh Start Reset</h4>
+        </div>
+        <div class="card-body">
+            @if (TempData["Err"] != null)
+            {
+                <div class="alert alert-danger">@TempData["Err"]</div>
+            }
+
+            @if (TempData["Ok"] != null)
+            {
+                <div class="alert alert-success">@TempData["Ok"]</div>
+            }
+
+            <div class="alert alert-warning">
+                <strong>Warning:</strong> This will permanently delete all operational data.
+            </div>
+
+            <p><strong>Database:</strong> @ViewBag.DatabaseName</p>
+
+            <p>This will delete:</p>
+            <ul>
+                <li>All LPG batches</li>
+                <li>All customers</li>
+                <li>All sales</li>
+                <li>All sale items</li>
+                <li>All daily closes</li>
+                <li>All credit payments</li>
+                <li>All shift closes</li>
+                <li>All sync queue records</li>
+            </ul>
+
+            <p>This will keep:</p>
+            <ul>
+                <li>Products</li>
+                <li>Product categories</li>
+                <li>Stations</li>
+                <li>Users and roles</li>
+            </ul>
+
+            <form asp-action="FreshStart" method="post">
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label for="confirmationText" class="form-label">
+                        Type <strong>START FRESH</strong> exactly to continue
+                    </label>
+                    <input id="confirmationText"
+                           name="confirmationText"
+                           class="form-control"
+                           autocomplete="off"
+                           required />
+                </div>
+
+                <button type="submit"
+                        class="btn btn-danger"
+                        onclick="return confirm('This will permanently wipe all operational data. Continue?');">
+                    Start Fresh
+                </button>
+
+                <a asp-controller="Admin" asp-action="Index" class="btn btn-secondary ms-2">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>

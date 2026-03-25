@@ -108,7 +108,19 @@ public class ProductsController : Controller
             return RedirectToAction(nameof(Index), new { categoryId, showInactive });
         }
 
-        var products = await _db.Products.ToListAsync();
+        var lpgRefillCategory = await _db.ProductCategories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Name == "LPG Refills");
+
+        if (lpgRefillCategory is null)
+        {
+            TempData["Err"] = "LPG Refills category was not found.";
+            return RedirectToAction(nameof(Index), new { categoryId, showInactive });
+        }
+
+        var products = await _db.Products
+            .Where(p => p.CategoryId == lpgRefillCategory.Id)
+            .ToListAsync();
 
         int updatedCount = 0;
         int skippedCount = 0;
@@ -127,7 +139,7 @@ public class ProductsController : Controller
 
         await _db.SaveChangesAsync();
 
-        TempData["Ok"] = $"Bulk price update completed. Updated {updatedCount} product(s), skipped {skippedCount}.";
+        TempData["Ok"] = $"LPG refills prices updated. Updated {updatedCount} product(s), skipped {skippedCount}.";
         return RedirectToAction(nameof(Index), new { categoryId, showInactive });
     }
 }

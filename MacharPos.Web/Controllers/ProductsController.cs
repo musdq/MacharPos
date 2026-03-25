@@ -97,4 +97,37 @@ public class ProductsController : Controller
 
         ViewBag.Categories = new SelectList(cats, "Id", "Name", selected);
     }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkUpdatePrices(decimal pricePerKg, Guid? categoryId = null, bool showInactive = false)
+    {
+        if (pricePerKg <= 0)
+        {
+            TempData["Err"] = "Please enter a valid price per kg.";
+            return RedirectToAction(nameof(Index), new { categoryId, showInactive });
+        }
+
+        var products = await _db.Products.ToListAsync();
+
+        int updatedCount = 0;
+        int skippedCount = 0;
+
+        foreach (var product in products)
+        {
+            if (product.EquivalentKg <= 0)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            product.DefaultUnitPrice = Math.Round((decimal)(product.EquivalentKg * pricePerKg), 2, MidpointRounding.AwayFromZero);
+            updatedCount++;
+        }
+
+        await _db.SaveChangesAsync();
+
+        TempData["Ok"] = $"Bulk price update completed. Updated {updatedCount} product(s), skipped {skippedCount}.";
+        return RedirectToAction(nameof(Index), new { categoryId, showInactive });
+    }
 }

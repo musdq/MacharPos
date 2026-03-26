@@ -346,7 +346,11 @@ private static string MakeStationCode(string stationName)
         var prodMap = await LoadProductsMapAsync(vm);
 
         // Determine if we need LPG batch + if we need manager approval
-        var needsLpgBatch = vm.Lines.Any(l => prodMap.TryGetValue(l.ProductId, out var p) && (p.EquivalentKg ?? 0m) > 0m);
+        var needsLpgBatch = vm.Lines.Any(l =>
+      l.ProductId.HasValue &&
+      prodMap.TryGetValue(l.ProductId.Value, out var p) &&
+      (p.EquivalentKg ?? 0m) > 0m
+  );
         var hasPriceOverride = HasPriceOverride(vm, prodMap);
         var discount = NormalizeDiscount(vm.DiscountAmount);
 
@@ -451,7 +455,6 @@ private static string MakeStationCode(string stationName)
             throw;
         }
     }
-
     private async Task PopulateDropdownsAsync(SaleCreateVm vm, Guid stationId)
     {
         var customers = await _db.Customers.AsNoTracking()
@@ -464,22 +467,80 @@ private static string MakeStationCode(string stationName)
             .OrderBy(p => p.Name)
             .ToListAsync();
 
-        vm.Customers = customers.Select(c => new SelectListItem(c.Name, c.Id.ToString(), c.Id == vm.CustomerId)).ToList();
-        vm.Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList();
+        vm.Customers = customers
+            .Select(c => new SelectListItem(c.Name, c.Id.ToString(), c.Id == vm.CustomerId))
+            .ToList();
+
+        vm.Products = products
+            .Select(p => new SelectListItem(p.Name, p.Id.ToString()))
+            .ToList();
+
         vm.PaymentMethods = Enum.GetValues<PaymentMethod>()
             .Where(pm => pm != PaymentMethod.Credit)
             .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == vm.PaymentMethod))
             .ToList();
+
+        ViewBag.ProductPrices = products.ToDictionary(
+            p => p.Id.ToString(),
+            p => p.DefaultUnitPrice
+        );
     }
 
     private void NormalizeAndValidateLines(SaleCreateVm vm)
     {
         vm.Lines = vm.Lines?
-            .Where(l => l.ProductId != Guid.Empty && l.Qty > 0)
+            .Where(l => l.ProductId.HasValue && l.ProductId.Value != Guid.Empty)
             .ToList() ?? new List<SaleLineVm>();
 
         if (vm.Lines.Count == 0)
+        {
             ModelState.AddModelError("", "Add at least one valid item.");
+            return;
+        }
+
+        foreach (var line in vm.Lines)
+        {
+            if (line.UnitPrice < 0)
+            {
+                ModelState.AddModelError("", "Unit price cannot be negative.");
+                continue;
+            }
+
+            if (line.EntryMode == SaleEntryMode.ByAmount)
+            {
+                if (!line.Amount.HasValue || line.Amount.Value <= 0)
+                {
+                    ModelState.AddModelError("", "Amount must be greater than zero.");
+                    continue;
+                }
+
+                if (line.UnitPrice <= 0)
+                {
+                    ModelState.AddModelError("", "Unit price must be greater than zero.");
+                    continue;
+                }
+
+                line.Qty = Math.Round(
+                    line.Amount.Value / line.UnitPrice,
+                    2,
+                    MidpointRounding.AwayFromZero
+                );
+            }
+            else
+            {
+                if (line.Qty <= 0)
+                {
+                    ModelState.AddModelError("", "Quantity must be greater than zero.");
+                    continue;
+                }
+
+                line.Amount = Math.Round(
+                    line.Qty * line.UnitPrice,
+                    2,
+                    MidpointRounding.AwayFromZero
+                );
+            }
+        }
     }
 
     private async Task<Dictionary<Guid, Product>> LoadProductsMapAsync(SaleCreateVm vm)
@@ -494,7 +555,7 @@ private static string MakeStationCode(string stationName)
     {
         foreach (var l in vm.Lines)
         {
-            if (!prodMap.TryGetValue(l.ProductId, out var prod)) continue;
+            if (!l.ProductId.HasValue || !prodMap.TryGetValue(l.ProductId.Value, out var prod)) continue;
             if (l.UnitPrice > 0m && l.UnitPrice != prod.DefaultUnitPrice) return true;
         }
         return false;
@@ -509,12 +570,24 @@ private static string MakeStationCode(string stationName)
     private decimal CalculateSubtotalPreview(SaleCreateVm vm, Dictionary<Guid, Product> prodMap)
     {
         decimal subtotal = 0m;
+
         foreach (var l in vm.Lines)
         {
-            if (!prodMap.TryGetValue(l.ProductId, out var p)) continue;
+            if (!l.ProductId.HasValue || !prodMap.TryGetValue(l.ProductId.Value, out var p))
+                continue;
+
             var unitPrice = (l.UnitPrice > 0m) ? l.UnitPrice : p.DefaultUnitPrice;
-            subtotal += l.Qty * unitPrice;
+
+            if (l.EntryMode == SaleEntryMode.ByAmount && l.Amount.HasValue && l.Amount.Value > 0)
+            {
+                subtotal += l.Amount.Value;
+            }
+            else
+            {
+                subtotal += l.Qty * unitPrice;
+            }
         }
+
         return subtotal;
     }
 
@@ -572,11 +645,11 @@ private static string MakeStationCode(string stationName)
     }
 
     private (bool Success, string? ErrorMessage, List<SaleItem> Items, decimal Subtotal, decimal TotalLpgKg)
-        BuildSaleItems(
-            SaleCreateVm vm,
-            Dictionary<Guid, Product> prodMap,
-            LpgBatch? activeBatch,
-            string? approvedByUserId)
+     BuildSaleItems(
+         SaleCreateVm vm,
+         Dictionary<Guid, Product> prodMap,
+         LpgBatch? activeBatch,
+         string? approvedByUserId)
     {
         var items = new List<SaleItem>();
         decimal subtotal = 0m;
@@ -584,7 +657,7 @@ private static string MakeStationCode(string stationName)
 
         foreach (var line in vm.Lines)
         {
-            if (!prodMap.TryGetValue(line.ProductId, out var p))
+            if (!line.ProductId.HasValue || !prodMap.TryGetValue(line.ProductId.Value, out var p))
                 continue;
 
             var qty = line.Qty;
@@ -600,7 +673,18 @@ private static string MakeStationCode(string stationName)
                 unitPrice = line.UnitPrice;
             }
 
-            var lineTotal = qty * unitPrice;
+            decimal lineTotal;
+            if (line.EntryMode == SaleEntryMode.ByAmount)
+            {
+                if (!line.Amount.HasValue || line.Amount.Value <= 0)
+                    return (false, "Amount must be greater than zero.", new(), 0m, 0m);
+
+                lineTotal = line.Amount.Value;
+            }
+            else
+            {
+                lineTotal = qty * unitPrice;
+            }
 
             var item = new SaleItem
             {
@@ -617,12 +701,12 @@ private static string MakeStationCode(string stationName)
                 item.LpgBatchId = activeBatch.Id;
                 item.LpgKg = lpgKg;
 
-                // Phase 6.2: stamp LPG cost at time of sale (for stable margins later)
                 if (activeBatch.CostPerKg.HasValue)
                 {
                     item.UnitCostAtSale = activeBatch.CostPerKg.Value;
                     item.TotalCostAtSale = lpgKg * activeBatch.CostPerKg.Value;
                 }
+
                 totalLpgKg += lpgKg;
             }
 

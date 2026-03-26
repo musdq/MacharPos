@@ -23,4 +23,6 @@ public class SaleCreateVm
     public string? ManagerEmail { get; set; }
     public string? ManagerPassword { get; set; }
 
+
+
 }

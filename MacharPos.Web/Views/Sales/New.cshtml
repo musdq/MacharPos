@@ -1,60 +1,58 @@
 @model MacharPos.Web.ViewModels.Sales.SaleCreateVm
 @using MacharPos.Core.Entities
+@using MacharPos.Web.ViewModels.Sales
 
 @{
     ViewData["Title"] = "New Sale";
-    var productPrices = (Dictionary<string, decimal>)ViewBag.ProductPrices;
+    var productPrices = ViewBag.ProductPrices as Dictionary<string, decimal>
+                      ?? new Dictionary<string, decimal>();
 }
 
-<!-- Tom Select (searchable dropdown) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" />
 
 <div class="d-flex align-items-center justify-content-between mb-3">
-  <h1 class="h5 mb-0">New Sale</h1>
-  <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
+    <h1 class="h5 mb-0">New Sale</h1>
+    <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
 </div>
-
 
 @if (ViewBag.UnclosedDate is string unclosed && ViewBag.UnclosedDateDisplay is string unclosedDisplay)
 {
-  <div class="alert alert-warning d-flex align-items-start justify-content-between gap-3">
-    <div>
-      <div class="fw-semibold">Previous day not closed</div>
-      <div class="small text-muted">Please close <span class="fw-semibold">@unclosedDisplay</span> to keep reconciliation accurate.</div>
+    <div class="alert alert-warning d-flex align-items-start justify-content-between gap-3">
+        <div>
+            <div class="fw-semibold">Previous day not closed</div>
+            <div class="small text-muted">Please close <span class="fw-semibold">@unclosedDisplay</span> to keep reconciliation accurate.</div>
+        </div>
+        <a class="btn btn-sm btn-outline-dark" href="/DailyClose?date=@unclosed">Go to Daily Close</a>
     </div>
-    <a class="btn btn-sm btn-outline-dark" href="/DailyClose?date=@unclosed">Go to Daily Close</a>
-  </div>
 }
-
-
 
 @if (!ViewData.ModelState.IsValid)
 {
-  <div class="alert alert-danger">
-    @foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors))
-    {
-      <div>@e.ErrorMessage</div>
-    }
-  </div>
+    <div class="alert alert-danger">
+        @foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+        {
+            <div>@e.ErrorMessage</div>
+        }
+    </div>
 }
 
 <div class="card shadow-sm">
-  <div class="card-body">
-    <form method="post" id="saleForm">
-      @Html.AntiForgeryToken()
+    <div class="card-body">
+        <form method="post" id="saleForm">
+            @Html.AntiForgeryToken()
 
-      <div class="row g-2">
-        <div class="col-12 col-md-6">
-          <label class="form-label">Customer</label>
-          <select class="form-select" asp-for="CustomerId" asp-items="Model.Customers"></select>
-          <div class="form-text">Default is Walk-in.</div>
-        </div>
+            <div class="row g-2">
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Customer</label>
+                    <select class="form-select" asp-for="CustomerId" asp-items="Model.Customers"></select>
+                    <div class="form-text">Default is Walk-in.</div>
+                </div>
 
-        <div class="col-12 col-md-6">
-          <label class="form-label">Payment Method</label>
-          <select class="form-select" asp-for="PaymentMethod" asp-items="Model.PaymentMethods"></select>
-        </div>
-      </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label">Payment Method</label>
+                    <select class="form-select" asp-for="PaymentMethod" asp-items="Model.PaymentMethods"></select>
+                </div>
+            </div>
 
             <hr class="my-3" />
 
@@ -75,306 +73,407 @@
                 </div>
             </div>
 
+            <hr class="my-3" />
 
-      <hr class="my-3"/>
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="fw-semibold">Items</div>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="addLine()">Add Line</button>
+            </div>
 
-      <div class="d-flex align-items-center justify-content-between">
-        <div class="fw-semibold">Items</div>
-        <button type="button" class="btn btn-outline-primary btn-sm" onclick="addLine()">Add Line</button>
-      </div>
+            <div class="table-responsive mt-2">
+                <table class="table table-sm align-middle" id="linesTable">
+                    <thead>
+                        <tr>
+                            <th style="min-width:260px;">Product</th>
+                            <th style="width:140px;">Mode</th>
+                            <th style="width:110px;">Qty (Kg)</th>
+                            <th style="width:140px;">Amount (₦)</th>
+                            <th style="width:140px;">Unit Price</th>
+                            <th class="text-end" style="width:160px;">Line Total</th>
+                            <th style="width:50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < Model.Lines.Count; i++)
+                        {
+                            <tr>
+                                <td>
+                                    <select class="form-select product-select" name="Lines[@i].ProductId" onchange="onProductChange(this)">
+                                        <option value="">Select...</option>
+                                        @foreach (var p in Model.Products)
+                                        {
+                                            var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
+                                            var selected = Model.Lines[i].ProductId != Guid.Empty && Model.Lines[i].ProductId.ToString() == p.Value;
+                                            if (selected)
+                                            {
+                                                <option value="@p.Value" data-price="@price" selected>@p.Text</option>
+                                            }
+                                            else
+                                            {
+                                                <option value="@p.Value" data-price="@price">@p.Text</option>
+                                            }
+                                        }
+                                    </select>
+                                </td>
 
-      <div class="table-responsive mt-2">
-        <table class="table table-sm align-middle" id="linesTable">
-          <thead>
-            <tr>
-              <th style="min-width:260px;">Product</th>
-              <th style="width:110px;">Qty</th>
-              <th style="width:220px;">Unit Price</th>
-              <th class="text-end" style="width:160px;">Line Total</th>
-              <th style="width:50px;"></th>
-            </tr>
-          </thead>
-          <tbody>
-          @for (int i = 0; i < Model.Lines.Count; i++)
-          {
-            <tr>
-              <td>
-                <select class="form-select product-select" name="Lines[@i].ProductId" onchange="onProductChange(this)">
-                  <option value="">Select...</option>
-                  @foreach (var p in Model.Products)
-                  {
-                    var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
-                    <option value="@p.Value" data-price="@price">@p.Text</option>
-                  }
-                </select>
-              </td>
-              <td>
-                <input class="form-control qty-input" name="Lines[@i].Qty" type="number" step="1" value="1" oninput="calcTotals()" />
-              </td>
-              <td>
-                <input class="form-control price-input" name="Lines[@i].UnitPrice" type="number" value="0" readonly />
-                <div class="form-text mt-1">
-                  <a href="#" class="text-decoration-none" onclick="return togglePriceOverride(this)">Override</a>
+                                <td>
+                                    <select class="form-select mode-select" name="Lines[@i].EntryMode" onchange="onModeChange(this)">
+                                        @if (Model.Lines[i].EntryMode == SaleEntryMode.ByQty)
+                                        {
+                                            <option value="1" selected>By Kg</option>
+                                            <option value="2">By Amount</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="1">By Kg</option>
+                                            <option value="2" selected>By Amount</option>
+                                        }
+                                    </select>
+                                </td>
+
+                                <td>
+                                    <input class="form-control qty-input" name="Lines[@i].Qty" type="number" step="0.01" value="@Model.Lines[i].Qty" oninput="calcTotals()" />
+                                </td>
+
+                                <td>
+                                    <input class="form-control amount-input" name="Lines[@i].Amount" type="number" step="0.01" value="@(Model.Lines[i].Amount?.ToString("0.##") ?? "")" oninput="calcTotals()" />
+                                </td>
+
+                                <td>
+                                    <input class="form-control price-input" name="Lines[@i].UnitPrice" type="number" step="0.01" value="@Model.Lines[i].UnitPrice" readonly oninput="calcTotals()" />
+                                    <div class="form-text mt-1">
+                                        <a href="#" class="text-decoration-none" onclick="return togglePriceOverride(this)">Override</a>
+                                    </div>
+                                </td>
+
+                                <td class="text-end">
+                                    <span class="lineTotal">0.00</span>
+                                </td>
+
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex justify-content-end mt-2">
+                <div class="fs-6">
+                    Total: <span class="fw-semibold">₦<span id="grandTotal">0.00</span></span>
                 </div>
-              </td>
-              <td class="text-end">
-                <span class="lineTotal">0.00</span>
-              </td>
-              <td class="text-end">
-                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button>
-              </td>
-            </tr>
-          }
-          </tbody>
-        </table>
-      </div>
+            </div>
 
-      <div class="d-flex justify-content-end mt-2">
-        <div class="fs-6">
-          Total: <span class="fw-semibold">₦<span id="grandTotal">0.00</span></span>
-        </div>
-      </div>
-
-      <button class="btn btn-dark w-100 mt-3">Complete Sale</button>
-    </form>
-  </div>
+            <button class="btn btn-dark w-100 mt-3">Complete Sale</button>
+        </form>
+    </div>
 </div>
 
 @section Scripts {
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-<script>
-  // --- Tom Select init (searchable dropdowns) ---
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        function addLine() {
+          const tbody = document.querySelector("#linesTable tbody");
+          const idx = tbody.querySelectorAll("tr").length;
 
-  function addLine() {
-    const tbody = document.querySelector("#linesTable tbody");
-    const idx = tbody.querySelectorAll("tr").length;
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>
+              <select class="form-select product-select" name="Lines[${idx}].ProductId" onchange="onProductChange(this)">
+                <option value="">Select...</option>
+                ${getProductsOptionsHtml()}
+              </select>
+            </td>
+            <td>
+              <select class="form-select mode-select" name="Lines[${idx}].EntryMode" onchange="onModeChange(this)">
+                <option value="1" selected>By Kg</option>
+                <option value="2">By Amount</option>
+              </select>
+            </td>
+            <td>
+              <input class="form-control qty-input" name="Lines[${idx}].Qty" type="number" step="0.01" value="0" oninput="calcTotals()" />
+            </td>
+            <td>
+              <input class="form-control amount-input" name="Lines[${idx}].Amount" type="number" step="0.01" value="" oninput="calcTotals()" />
+            </td>
+            <td>
+              <input class="form-control price-input" name="Lines[${idx}].UnitPrice" type="number" step="0.01" value="0" readonly oninput="calcTotals()" />
+              <div class="form-text mt-1">
+                <a href="#" class="text-decoration-none" onclick="return togglePriceOverride(this)">Override</a>
+              </div>
+            </td>
+            <td class="text-end"><span class="lineTotal">0.00</span></td>
+            <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button></td>
+          `;
+          tbody.appendChild(row);
+          enhanceRow(row);
+          setRowModeState(row);
+          calcTotals();
+          focusProductOnRow(row);
+        }
 
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>
-          <select class="form-select product-select" name="Lines[${idx}].ProductId" onchange="onProductChange(this)">
-          <option value="">Select...</option>
-          ${getProductsOptionsHtml()}
-        </select>
-      </td>
-      <td><input class="form-control qty-input" name="Lines[${idx}].Qty" type="number" step="1" value="1" oninput="calcTotals()" /></td>
-      <td>
-        <input class="form-control price-input" name="Lines[${idx}].UnitPrice" type="number" value="0" readonly />
-        <div class="form-text mt-1">
-          <a href="#" class="text-decoration-none" onclick="return togglePriceOverride(this)">Override</a>
-        </div>
-      </td>
-      <td class="text-end"><span class="lineTotal">0.00</span></td>
-      <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLine(this)">×</button></td>
-    `;
-    tbody.appendChild(row);
-    enhanceRow(row);
-    calcTotals();
-    focusProductOnRow(row);
-  }
+        function removeLine(btn) {
+          const tbody = document.querySelector("#linesTable tbody");
+          const row = btn.closest("tr");
+          row.remove();
 
-  function removeLine(btn) {
-    const tbody = document.querySelector("#linesTable tbody");
-    const row = btn.closest("tr");
-    row.remove();
+          const rows = tbody.querySelectorAll("tr");
+          rows.forEach((r, idx) => {
+            r.querySelectorAll("select, input").forEach(el => {
+              if (el.name) el.name = el.name.replace(/Lines\[\d+\]/, `Lines[${idx}]`);
+            });
+          });
 
-    // Re-index names to keep model binding clean
-    const rows = tbody.querySelectorAll("tr");
-    rows.forEach((r, idx) => {
-      r.querySelectorAll("select, input").forEach(el => {
-        if (el.name) el.name = el.name.replace(/Lines\[\d+\]/, `Lines[${idx}]`);
-      });
-    });
+          calcTotals();
+        }
 
-    calcTotals();
-  }
+                function calcTotals() {
+          const rows = document.querySelectorAll("#linesTable tbody tr");
+          let grand = 0;
 
-  function calcTotals() {
-    const rows = document.querySelectorAll("#linesTable tbody tr");
-    let grand = 0;
+          rows.forEach(r => {
+            const mode = r.querySelector('select[name$=".EntryMode"]').value;
+            const qtyInput = r.querySelector('input[name$=".Qty"]');
+            const amountInput = r.querySelector('input[name$=".Amount"]');
+            const priceInput = r.querySelector('input[name$=".UnitPrice"]');
 
-    rows.forEach(r => {
-      const qty = parseFloat(r.querySelector('input[name$=".Qty"]').value || "0");
-      const price = parseFloat(r.querySelector('input[name$=".UnitPrice"]').value || "0");
-      const total = (qty * price) || 0;
-      r.querySelector(".lineTotal").innerText = total.toFixed(2);
-      grand += total;
-    });
+            const qty = parseFloat(qtyInput.value || "0");
+            const amount = parseFloat(amountInput.value || "0");
+            const price = parseFloat(priceInput.value || "0");
 
-    document.getElementById("grandTotal").innerText = grand.toFixed(2);
-  }
+            let total = 0;
 
-  function onProductChange(sel) {
+            if (mode === "2") {
+              total = amount || 0;
+
+              if (price > 0 && amount > 0) {
+                qtyInput.value = (amount / price).toFixed(2);
+              } else {
+                qtyInput.value = "0";
+              }
+            } else {
+              total = (qty * price) || 0;
+
+              if (qty > 0 && price > 0) {
+                amountInput.value = total.toFixed(2);
+              } else {
+                amountInput.value = "";
+              }
+
+              if (!qtyInput.value || qtyInput.value.trim() === "") {
+                qtyInput.value = "0";
+              }
+            }
+
+            r.querySelector(".lineTotal").innerText = total.toFixed(2);
+            grand += total;
+          });
+
+          document.getElementById("grandTotal").innerText = grand.toFixed(2);
+        }
+
+        function onProductChange(sel) {
           const opt = sel.options[sel.selectedIndex];
           const price = parseFloat(opt.getAttribute("data-price") || "0");
           const row = sel.closest("tr");
           row.querySelector('input[name$=".UnitPrice"]').value = price.toFixed(2);
           calcTotals();
-          focusQtyOnRow(row);
+          focusPrimaryInputOnRow(row);
         }
 
-  // --- Price override (requires Manager auth fields) ---
-  function togglePriceOverride(anchor) {
-    const row = anchor.closest("tr");
-    const priceInput = row.querySelector('input[name$=".UnitPrice"]');
-    const isReadonly = priceInput.hasAttribute("readonly");
 
-    if (isReadonly) {
-      priceInput.removeAttribute("readonly");
-      priceInput.classList.add("border-warning");
-      anchor.textContent = "Lock";
-      // Any override should trigger manager auth UI
-      forceManagerAuthOn();
-      // Focus price for quick editing
-      setTimeout(() => priceInput.focus(), 0);
-    } else {
-      priceInput.setAttribute("readonly", "readonly");
-      priceInput.classList.remove("border-warning");
-      anchor.textContent = "Override";
-    }
+         function onModeChange(sel) {
+          const row = sel.closest("tr");
 
-    toggleManagerAuth();
-    return false;
-  }
+          const productSelect = row.querySelector('select[name$=".ProductId"]');
 
-  function toggleManagerAuth(){
+          // if switching to By Amount and product not selected → auto-select LPG
+          if (sel.value === "2" && (!productSelect.value ||
+              productSelect.value === "00000000-0000-0000-0000-000000000000")) {
+
+            // replace with your LPG product ID
+            productSelect.value = "PUT-YOUR-LPG-PRODUCT-ID-HERE";
+
+            if (productSelect.tomselect) {
+              productSelect.tomselect.setValue(productSelect.value);
+            }
+
+            onProductChange(productSelect);
+          }
+
+          setRowModeState(row);
+          calcTotals();
+          focusPrimaryInputOnRow(row);
+        }
+
+        function togglePriceOverride(anchor) {
+          const row = anchor.closest("tr");
+          const priceInput = row.querySelector('input[name$=".UnitPrice"]');
+          const isReadonly = priceInput.hasAttribute("readonly");
+
+          if (isReadonly) {
+            priceInput.removeAttribute("readonly");
+            priceInput.classList.add("border-warning");
+            anchor.textContent = "Lock";
+            forceManagerAuthOn();
+            setTimeout(() => priceInput.focus(), 0);
+          } else {
+            priceInput.setAttribute("readonly", "readonly");
+            priceInput.classList.remove("border-warning");
+            anchor.textContent = "Override";
+          }
+
+          toggleManagerAuth();
+          return false;
+        }
+
+        function toggleManagerAuth() {
           const disc = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
           const show = disc > 0 || hasAnyPriceOverride();
           document.getElementById("mgrEmailWrap").style.display = show ? "" : "none";
           document.getElementById("mgrPassWrap").style.display = show ? "" : "none";
           setManagerFieldsRequired(show);
         }
-        toggleManagerAuth();
 
-  function forceManagerAuthOn() {
-    // If discount is 0 but we need auth for overrides, just show fields.
-    document.getElementById("mgrEmailWrap").style.display = "";
-    document.getElementById("mgrPassWrap").style.display = "";
-  }
-
-  function hasAnyPriceOverride() {
-    // We consider price overridden if input is not readonly.
-    return Array.from(document.querySelectorAll('#linesTable tbody tr input[name$=".UnitPrice"]'))
-      .some(i => !i.hasAttribute('readonly'));
-  }
-
-
-  function requiresManagerAuth() {
-    const disc = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
-    return disc > 0 || hasAnyPriceOverride();
-  }
-
-  function setManagerFieldsRequired(isRequired) {
-    const email = document.querySelector('[name="ManagerEmail"]');
-    const pass = document.querySelector('[name="ManagerPassword"]');
-    if (email) email.required = isRequired;
-    if (pass) pass.required = isRequired;
-  }
-
-  function validateManagerAuthBeforeSubmit(e) {
-    if (!requiresManagerAuth()) {
-      setManagerFieldsRequired(false);
-      return true;
-    }
-
-    // Ensure fields are visible + required
-    forceManagerAuthOn();
-    setManagerFieldsRequired(true);
-
-    const emailVal = (document.querySelector('[name="ManagerEmail"]')?.value || "").trim();
-    const passVal  = (document.querySelector('[name="ManagerPassword"]')?.value || "").trim();
-
-    if (!emailVal || !passVal) {
-      e?.preventDefault?.();
-      alert("Manager approval is required (email + password) for discount or price override.");
-      // Focus first missing field
-      if (!emailVal) document.querySelector('[name="ManagerEmail"]')?.focus();
-      else document.querySelector('[name="ManagerPassword"]')?.focus();
-      return false;
-    }
-
-    return true;
-  }
-
-
-  // Build options from server-rendered list once
-  function getProductsOptionsHtml() {
-    const opts = [];
-    @foreach (var p in Model.Products)
-    {
-                var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
-              <text>opts.push(`<option value="@p.Value" data-price="@price">@p.Text</option>`);</text>
-    }
-    return opts.join("");
-  }
-
-  // --- Keyboard flow / UX ---
-  function enhanceRow(row) {
-    // TomSelect on product dropdown
-    const sel = row.querySelector('select[name$=".ProductId"]');
-    if (sel && window.TomSelect && !sel.tomselect) {
-      new TomSelect(sel, {
-        create: false,
-        allowEmptyOption: true,
-        placeholder: 'Select...',
-        dropdownParent: 'body'
-      });
-    }
-
-    // Enter on Qty -> add new line (if last row)
-    const qty = row.querySelector('input[name$=".Qty"]');
-    if (qty) {
-      qty.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
-        const tbody = document.querySelector('#linesTable tbody');
-        const rows = Array.from(tbody.querySelectorAll('tr'));
-        const isLast = rows.length && rows[rows.length - 1] === row;
-        if (isLast) {
-          addLine();
-        } else {
-          // Focus next row product
-          const next = rows[rows.indexOf(row) + 1];
-          if (next) focusProductOnRow(next);
+        function forceManagerAuthOn() {
+          document.getElementById("mgrEmailWrap").style.display = "";
+          document.getElementById("mgrPassWrap").style.display = "";
         }
-      });
-    }
-  }
 
-  function focusProductOnRow(row) {
-    const sel = row.querySelector('select[name$=".ProductId"]');
-    if (!sel) return;
-    // TomSelect focus if present
-    if (sel.tomselect) {
-      sel.tomselect.focus();
-    } else {
-      sel.focus();
-    }
-  }
+        function hasAnyPriceOverride() {
+          return Array.from(document.querySelectorAll('#linesTable tbody tr input[name$=".UnitPrice"]'))
+            .some(i => !i.hasAttribute('readonly'));
+        }
 
-  function focusQtyOnRow(row) {
-    const qty = row.querySelector('input[name$=".Qty"]');
-    if (!qty) return;
-    setTimeout(() => {
-      qty.focus();
-      qty.select?.();
-    }, 0);
-  }
+        function requiresManagerAuth() {
+          const disc = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
+          return disc > 0 || hasAnyPriceOverride();
+        }
 
-  function enhanceAllRows() {
-    document.querySelectorAll('#linesTable tbody tr').forEach(enhanceRow);
-  }
+        function setManagerFieldsRequired(isRequired) {
+          const email = document.querySelector('[name="ManagerEmail"]');
+          const pass = document.querySelector('[name="ManagerPassword"]');
+          if (email) email.required = isRequired;
+          if (pass) pass.required = isRequired;
+        }
 
-  // Auto-focus first product on load
-  document.addEventListener('DOMContentLoaded', () => {
-    enhanceAllRows();
-    const form = document.getElementById('saleForm');
-    if (form) form.addEventListener('submit', validateManagerAuthBeforeSubmit);
+        function validateManagerAuthBeforeSubmit(e) {
+          if (!requiresManagerAuth()) {
+            setManagerFieldsRequired(false);
+            return true;
+          }
 
-    const firstRow = document.querySelector('#linesTable tbody tr');
-    if (firstRow) focusProductOnRow(firstRow);
-  });
+          forceManagerAuthOn();
+          setManagerFieldsRequired(true);
 
-  calcTotals();
- </script>
+          const emailVal = (document.querySelector('[name="ManagerEmail"]')?.value || "").trim();
+          const passVal  = (document.querySelector('[name="ManagerPassword"]')?.value || "").trim();
+
+          if (!emailVal || !passVal) {
+            e?.preventDefault?.();
+            alert("Manager approval is required (email + password) for discount or price override.");
+            if (!emailVal) document.querySelector('[name="ManagerEmail"]')?.focus();
+            else document.querySelector('[name="ManagerPassword"]')?.focus();
+            return false;
+          }
+
+          return true;
+        }
+
+        function getProductsOptionsHtml() {
+          const opts = [];
+          @foreach (var p in Model.Products)
+          {
+                var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
+                <text>opts.push(`<option value="@p.Value" data-price="@price">@p.Text</option>`);</text>
+          }
+          return opts.join("");
+        }
+
+        function enhanceRow(row) {
+          const sel = row.querySelector('select[name$=".ProductId"]');
+          if (sel && window.TomSelect && !sel.tomselect) {
+            new TomSelect(sel, {
+              create: false,
+              allowEmptyOption: true,
+              placeholder: 'Select...',
+              dropdownParent: 'body'
+            });
+          }
+
+          const qty = row.querySelector('input[name$=".Qty"]');
+          const amount = row.querySelector('input[name$=".Amount"]');
+
+          if (qty) {
+            qty.addEventListener('keydown', (e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              moveNextFromRow(row);
+            });
+          }
+
+          if (amount) {
+            amount.addEventListener('keydown', (e) => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              moveNextFromRow(row);
+            });
+          }
+        }
+
+        function moveNextFromRow(row) {
+          const tbody = document.querySelector('#linesTable tbody');
+          const rows = Array.from(tbody.querySelectorAll('tr'));
+          const isLast = rows.length && rows[rows.length - 1] === row;
+
+          if (isLast) {
+            addLine();
+          } else {
+            const next = rows[rows.indexOf(row) + 1];
+            if (next) focusProductOnRow(next);
+          }
+        }
+
+        function focusProductOnRow(row) {
+          const sel = row.querySelector('select[name$=".ProductId"]');
+          if (!sel) return;
+
+          if (sel.tomselect) sel.tomselect.focus();
+          else sel.focus();
+        }
+
+        function focusPrimaryInputOnRow(row) {
+          const mode = row.querySelector('select[name$=".EntryMode"]').value;
+          const target = mode === "2"
+            ? row.querySelector('input[name$=".Amount"]')
+            : row.querySelector('input[name$=".Qty"]');
+
+          if (!target) return;
+
+          setTimeout(() => {
+            target.focus();
+            target.select?.();
+          }, 0);
+        }
+
+        function enhanceAllRows() {
+          document.querySelectorAll('#linesTable tbody tr').forEach(r => {
+            enhanceRow(r);
+            setRowModeState(r);
+          });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+          enhanceAllRows();
+          toggleManagerAuth();
+          calcTotals();
+
+          const form = document.getElementById('saleForm');
+          if (form) form.addEventListener('submit', validateManagerAuthBeforeSubmit);
+
+          const firstRow = document.querySelector('#linesTable tbody tr');
+          if (firstRow) focusProductOnRow(firstRow);
+        });
+    </script>
 }

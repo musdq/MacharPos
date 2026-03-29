@@ -29,7 +29,8 @@ namespace MacharPos.Web.Controllers
         public async Task<IActionResult> Index()
         {
             var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-            var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
+            var station = await _db.Stations.AsNoTracking()
+                .FirstAsync(s => s.Id == stationId);
 
             var nowUtc = DateTime.UtcNow;
 
@@ -48,29 +49,39 @@ namespace MacharPos.Web.Controllers
                 var diff = ((int)date.DayOfWeek + 6) % 7; // Monday=0
                 return DateTime.SpecifyKind(date.AddDays(-diff), DateTimeKind.Utc);
             }
+
             var weekStart = StartOfWeekUtc(nowUtc);
             var weekEnd = weekStart.AddDays(7);
 
-            // Pull sales for month (covers week + today too)
+            // Pull sales for month
             var sales = await _db.Sales.AsNoTracking()
                 .Include(s => s.Items)
-                .Where(s => s.StationId == stationId && s.CreatedAt >= monthStart && s.CreatedAt < monthEnd)
+                .Where(s => s.StationId == stationId &&
+                            s.CreatedAt >= monthStart &&
+                            s.CreatedAt < monthEnd)
                 .ToListAsync();
 
             // KPI: Today's sales
-            var todaySales = sales.Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd).Sum(s => s.Total);
+            var todaySales = sales
+                .Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd)
+                .Sum(s => s.Total);
 
             // KPI: LPG kg sold this month
-            var lpgKgSoldThisMonth = sales.SelectMany(s => s.Items).Sum(i => i.LpgKg ?? 0m);
+            var lpgKgSoldThisMonth = sales
+                .SelectMany(s => s.Items)
+                .Sum(i => i.LpgKg ?? 0m);
+
+            // KPI: cylinders sold this month
+            // Assumption: each cylinder transaction = Qty 1, including "by amount"
+            var cylindersSoldThisMonth = sales
+                .SelectMany(s => s.Items)
+                .Sum(i => i.Qty);
 
             // KPI: active batch remaining kg
             var activeBatch = await _db.LpgBatches.AsNoTracking()
-                .FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == MacharPos.Core.Entities.LpgBatchStatus.Active);
-
-            //kpi cylinders
-            var cylindersSoldToday = await _db.SaleItems
-                                .Where(s => s.Sale.CreatedAt >= todayStart && s.Sale.CreatedAt < todayEnd)
-                                .SumAsync(x => x.Qty);
+                .FirstOrDefaultAsync(b =>
+                    b.StationId == stationId &&
+                    b.Status == MacharPos.Core.Entities.LpgBatchStatus.Active);
 
             var remainingKg = activeBatch?.RemainingKg ?? 0m;
 
@@ -84,36 +95,43 @@ namespace MacharPos.Web.Controllers
             var monthlySales = monthDays.Select(d =>
             {
                 var dEnd = d.AddDays(1);
-                return sales.Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd).Sum(s => s.Total);
+                return sales
+                    .Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd)
+                    .Sum(s => s.Total);
             }).ToList();
 
-            // WEEKLY BAR (days of current week Mon..Sun)
-            // We need sales for week; since we already filtered by month, week might cross month boundary.
-            // So fetch week sales separately (safe and simple).
+            // WEEKLY BAR (Mon..Sun)
             var weekSalesData = await _db.Sales.AsNoTracking()
-                .Where(s => s.StationId == stationId && s.CreatedAt >= weekStart && s.CreatedAt < weekEnd)
+                .Where(s => s.StationId == stationId &&
+                            s.CreatedAt >= weekStart &&
+                            s.CreatedAt < weekEnd)
                 .ToListAsync();
 
-            var weekDays = Enumerable.Range(0, 7).Select(i => weekStart.AddDays(i)).ToList();
-            var weeklyLabels = weekDays.Select(d => d.ToString("ddd")).ToList(); // Mon Tue Wed...
+            var weekDays = Enumerable.Range(0, 7)
+                .Select(i => weekStart.AddDays(i))
+                .ToList();
+
+            var weeklyLabels = weekDays
+                .Select(d => d.ToString("ddd"))
+                .ToList();
+
             var weeklySales = weekDays.Select(d =>
             {
                 var dEnd = d.AddDays(1);
-                return weekSalesData.Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd).Sum(s => s.Total);
+                return weekSalesData
+                    .Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd)
+                    .Sum(s => s.Total);
             }).ToList();
 
             var vm = new DashboardVm
             {
                 StationName = station.Name,
-
-                TodaySales = todaySales,                 // ADD this property in VM
+                TodaySales = todaySales,
                 LpgKgSoldThisMonth = lpgKgSoldThisMonth,
                 ActiveBatchRemainingKg = remainingKg,
-                LpgCylindersSoldThisMonth = (int)cylindersSoldToday, // For simplicity, using today's cylinders as monthly. Adjust as needed.
-
+                LpgCylindersSoldThisMonth = (int)cylindersSoldThisMonth,
                 MonthlyLabels = monthlyLabels,
                 MonthlySales = monthlySales,
-
                 WeeklyLabels = weeklyLabels,
                 WeeklySales = weeklySales
             };

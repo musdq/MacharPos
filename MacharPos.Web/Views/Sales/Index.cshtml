@@ -82,6 +82,7 @@
             <table class="table table-sm align-middle">
                 <thead>
                     <tr>
+                        <th>No</th>
                         <th>Date/Time</th>
                         <th>Receipt</th>
                         <th>Customer</th>
@@ -96,7 +97,9 @@
                     {
                         @foreach (var s in Model)
                         {
+                            var index = 1;
                             <tr>
+                                <td>@index</td>
                                 <td>@s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                                 <td class="fw-semibold">@s.ReceiptNo</td>
                                 <td>@(s.Customer?.Name ?? "Walk-in")</td>
@@ -119,6 +122,8 @@
                                     </div>
                                 </td>
                             </tr>
+
+                            index++;
                         }
                     }
                     else

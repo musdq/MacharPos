@@ -6,6 +6,9 @@
     ViewData["Title"] = "New Sale";
     var productPrices = ViewBag.ProductPrices as Dictionary<string, decimal>
                       ?? new Dictionary<string, decimal>();
+
+    var productEquivalentKgs = ViewBag.ProductEquivalentKgs as Dictionary<string, decimal>
+                            ?? new Dictionary<string, decimal>();
 }
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" />
@@ -86,7 +89,8 @@
                         <tr>
                             <th style="min-width:260px;">Product</th>
                             <th style="width:140px;">Mode</th>
-                            <th style="width:110px;">Qty (Kg)</th>
+                            <th style="width:110px;">Qty (Cyl)</th>
+                            <th style="width:110px;">Kg</th>
                             <th style="width:140px;">Amount (₦)</th>
                             <th style="width:140px;">Unit Price</th>
                             <th class="text-end" style="width:160px;">Line Total</th>
@@ -102,15 +106,17 @@
                                         <option value="">Select...</option>
                                         @foreach (var p in Model.Products)
                                         {
-                                            var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
+                                            var price = productPrices.TryGetValue(p.Value, out var pv) ? pv : 0m;
+                                            var eqKg = productEquivalentKgs.TryGetValue(p.Value, out var ev) ? ev : 0m;
                                             var selected = Model.Lines[i].ProductId != Guid.Empty && Model.Lines[i].ProductId.ToString() == p.Value;
+
                                             if (selected)
                                             {
-                                                <option value="@p.Value" data-price="@price" selected>@p.Text</option>
+                                                <option value="@p.Value" data-price="@price" data-eqkg="@eqKg" selected>@p.Text</option>
                                             }
                                             else
                                             {
-                                                <option value="@p.Value" data-price="@price">@p.Text</option>
+                                                <option value="@p.Value" data-price="@price" data-eqkg="@eqKg">@p.Text</option>
                                             }
                                         }
                                     </select>
@@ -132,7 +138,11 @@
                                 </td>
 
                                 <td>
-                                    <input class="form-control qty-input" name="Lines[@i].Qty" type="number" step="0.01" value="@Model.Lines[i].Qty" oninput="calcTotals()" />
+                                    <input class="form-control qty-input" name="Lines[@i].Qty" type="number" step="1" min="1" value="@(Model.Lines[i].Qty <= 0 ? 1 : Model.Lines[i].Qty)" oninput="calcTotals()" />
+                                </td>
+
+                                <td>
+                                    <input class="form-control kg-input" name="Lines[@i].Kg" type="number" step="0.01" value="@(Model.Lines[i].Kg?.ToString("0.##") ?? "")" readonly />
                                 </td>
 
                                 <td>
@@ -194,7 +204,10 @@
               </select>
             </td>
             <td>
-              <input class="form-control qty-input" name="Lines[${idx}].Qty" type="number" step="0.01" value="0" oninput="calcTotals()" />
+              <input class="form-control qty-input" name="Lines[${idx}].Qty" type="number" step="1" min="1" value="1" oninput="calcTotals()" />
+            </td>
+            <td>
+              <input class="form-control kg-input" name="Lines[${idx}].Kg" type="number" step="0.01" value="" readonly />
             </td>
             <td>
               <input class="form-control amount-input" name="Lines[${idx}].Amount" type="number" step="0.01" value="" oninput="calcTotals()" />
@@ -230,13 +243,18 @@
           calcTotals();
         }
 
-                function calcTotals() {
+              function calcTotals() {
           const rows = document.querySelectorAll("#linesTable tbody tr");
           let grand = 0;
 
           rows.forEach(r => {
             const mode = r.querySelector('select[name$=".EntryMode"]').value;
+            const productSelect = r.querySelector('select[name$=".ProductId"]');
+            const selectedOpt = productSelect?.options[productSelect.selectedIndex];
+
+            const eqKg = parseFloat(selectedOpt?.getAttribute("data-eqkg") || "0");
             const qtyInput = r.querySelector('input[name$=".Qty"]');
+            const kgInput = r.querySelector('input[name$=".Kg"]');
             const amountInput = r.querySelector('input[name$=".Amount"]');
             const priceInput = r.querySelector('input[name$=".UnitPrice"]');
 
@@ -247,14 +265,29 @@
             let total = 0;
 
             if (mode === "2") {
+              // By Amount
               total = amount || 0;
 
               if (price > 0 && amount > 0) {
-                qtyInput.value = (amount / price).toFixed(2);
+                kgInput.value = (amount / price).toFixed(2);
               } else {
-                qtyInput.value = "0";
+                kgInput.value = "";
+              }
+
+              if (!qtyInput.value || parseFloat(qtyInput.value) <= 0) {
+                qtyInput.value = "1";
               }
             } else {
+              // By Kg mode
+              // Qty = number of cylinders
+              // Kg auto-derived from product EquivalentKg × Qty
+              // Total = Qty × UnitPrice
+              if (eqKg > 0 && qty > 0) {
+                kgInput.value = (qty * eqKg).toFixed(2);
+              } else {
+                kgInput.value = "";
+              }
+
               total = (qty * price) || 0;
 
               if (qty > 0 && price > 0) {
@@ -263,8 +296,8 @@
                 amountInput.value = "";
               }
 
-              if (!qtyInput.value || qtyInput.value.trim() === "") {
-                qtyInput.value = "0";
+              if (!qtyInput.value || parseFloat(qtyInput.value) <= 0) {
+                qtyInput.value = "1";
               }
             }
 
@@ -275,38 +308,48 @@
           document.getElementById("grandTotal").innerText = grand.toFixed(2);
         }
 
-        function onProductChange(sel) {
+             function onProductChange(sel) {
           const opt = sel.options[sel.selectedIndex];
           const price = parseFloat(opt.getAttribute("data-price") || "0");
+          const eqKg = parseFloat(opt.getAttribute("data-eqkg") || "0");
           const row = sel.closest("tr");
+
           row.querySelector('input[name$=".UnitPrice"]').value = price.toFixed(2);
+
+          const mode = row.querySelector('select[name$=".EntryMode"]').value;
+          const qtyInput = row.querySelector('input[name$=".Qty"]');
+          const kgInput = row.querySelector('input[name$=".Kg"]');
+          const qty = parseFloat(qtyInput.value || "0");
+
+          if (mode === "1" && eqKg > 0 && qty > 0) {
+            kgInput.value = (qty * eqKg).toFixed(2);
+          } else if (mode === "2") {
+            kgInput.value = "";
+          }
+
           calcTotals();
           focusPrimaryInputOnRow(row);
         }
 
-
-         function onModeChange(sel) {
+        function onModeChange(sel) {
           const row = sel.closest("tr");
-
-          const productSelect = row.querySelector('select[name$=".ProductId"]');
-
-          // if switching to By Amount and product not selected → auto-select LPG
-          if (sel.value === "2" && (!productSelect.value ||
-              productSelect.value === "00000000-0000-0000-0000-000000000000")) {
-
-            // replace with your LPG product ID
-            productSelect.value = "PUT-YOUR-LPG-PRODUCT-ID-HERE";
-
-            if (productSelect.tomselect) {
-              productSelect.tomselect.setValue(productSelect.value);
-            }
-
-            onProductChange(productSelect);
-          }
-
           setRowModeState(row);
           calcTotals();
           focusPrimaryInputOnRow(row);
+        }
+
+              function setRowModeState(row) {
+          const mode = row.querySelector('select[name$=".EntryMode"]').value;
+          const kgInput = row.querySelector('input[name$=".Kg"]');
+          const amountInput = row.querySelector('input[name$=".Amount"]');
+
+          if (mode === "2") {
+            kgInput.setAttribute("readonly", "readonly");
+            amountInput.removeAttribute("readonly");
+          } else {
+            kgInput.setAttribute("readonly", "readonly");
+            amountInput.setAttribute("readonly", "readonly");
+          }
         }
 
         function togglePriceOverride(anchor) {
@@ -387,8 +430,9 @@
           const opts = [];
           @foreach (var p in Model.Products)
           {
-                var price = productPrices.TryGetValue(p.Value, out var v) ? v : 0m;
-                <text>opts.push(`<option value="@p.Value" data-price="@price">@p.Text</option>`);</text>
+                        var price = productPrices.TryGetValue(p.Value, out var pv) ? pv : 0m;
+                        var eqKg = productEquivalentKgs.TryGetValue(p.Value, out var ev) ? ev : 0m;
+                        <text>opts.push(`<option value="@p.Value" data-price="@price" data-eqkg="@eqKg">@p.Text</option>`);</text>
           }
           return opts.join("");
         }
@@ -466,19 +510,7 @@
           });
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-          enhanceAllRows();
-          toggleManagerAuth();
-          calcTotals();
-
-          const form = document.getElementById('saleForm');
-          if (form) form.addEventListener('submit', validateManagerAuthBeforeSubmit);
-
-          const firstRow = document.querySelector('#linesTable tbody tr');
-          if (firstRow) focusProductOnRow(firstRow);
-        });
-
-                let saleSubmitting = false;
+        let saleSubmitting = false;
 
         function lockSaleSubmit() {
           const form = document.getElementById('saleForm');
@@ -507,5 +539,33 @@
           const text = btn.querySelector('.btn-text');
           if (text) text.textContent = 'Complete Sale';
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+          enhanceAllRows();
+          toggleManagerAuth();
+          calcTotals();
+
+          const form = document.getElementById('saleForm');
+          if (form) {
+            form.addEventListener('submit', function (e) {
+              if (saleSubmitting || form.dataset.submitting === "true") {
+                e.preventDefault();
+                return false;
+              }
+
+              const ok = validateManagerAuthBeforeSubmit(e);
+              if (!ok) {
+                unlockSaleSubmit();
+                return false;
+              }
+
+              lockSaleSubmit();
+              return true;
+            });
+          }
+
+          const firstRow = document.querySelector('#linesTable tbody tr');
+          if (firstRow) focusProductOnRow(firstRow);
+        });
     </script>
 }

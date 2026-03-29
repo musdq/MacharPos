@@ -26,4 +26,6 @@ public class SaleLineVm
 
     [Range(0, 999999999)]
     public decimal? Amount { get; set; }
+
+    public decimal? Kg { get; set; }
 }

@@ -325,11 +325,12 @@ public class SalesController : Controller
         var walkin = customers.FirstOrDefault(c => c.Name == "Walk-in");
 
         var products = await _db.Products.AsNoTracking()
-            .Where(p => p.IsActive)
-            .OrderBy(p => p.Name)
-            .ToListAsync();
+                          .Where(p => p.IsActive)
+                          .OrderBy(p => p.Name)
+                          .ToListAsync();
 
         ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
+        ViewBag.ProductEquivalentKgs = products.ToDictionary(p => p.Id.ToString(), p => p.EquivalentKg ?? 0m);
 
         var vm = new SaleCreateVm
         {
@@ -427,7 +428,7 @@ public class SalesController : Controller
             if (activeBatch is not null && build.TotalLpgKg > 0m && activeBatch.RemainingKg < build.TotalLpgKg)
             {
                 ModelState.AddModelError("",
-                    $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N0}kg, attempted {build.TotalLpgKg:N0}kg.");
+                    $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N2}kg, attempted {build.TotalLpgKg:N2}kg.");
                 return View(vm);
             }
 
@@ -443,7 +444,7 @@ public class SalesController : Controller
                     Id = i.Id,
                     ProductId = i.ProductId,
                     Cylinders = (int)i.Qty,
-                    Kg = (decimal)i.LpgKg,
+                    Kg = i.LpgKg ?? 0m,
                     Price = i.UnitPrice
                 }).ToList()
             };
@@ -501,11 +502,15 @@ public class SalesController : Controller
             .ToList();
 
         ViewBag.ProductPrices = products.ToDictionary(
+     p => p.Id.ToString(),
+     p => p.DefaultUnitPrice
+ );
+
+        ViewBag.ProductEquivalentKgs = products.ToDictionary(
             p => p.Id.ToString(),
-            p => p.DefaultUnitPrice
+            p => p.EquivalentKg ?? 0m
         );
     }
-
     private void NormalizeAndValidateLines(SaleCreateVm vm)
     {
         vm.Lines = vm.Lines?
@@ -526,6 +531,12 @@ public class SalesController : Controller
                 continue;
             }
 
+            if (line.Qty <= 0)
+            {
+                ModelState.AddModelError("", "Quantity must be greater than zero.");
+                continue;
+            }
+
             if (line.EntryMode == SaleEntryMode.ByAmount)
             {
                 if (!line.Amount.HasValue || line.Amount.Value <= 0)
@@ -540,25 +551,19 @@ public class SalesController : Controller
                     continue;
                 }
 
-                line.Qty = Math.Round(
-                    line.Amount.Value / line.UnitPrice,
-                    2,
-                    MidpointRounding.AwayFromZero
-                );
+                // Kg is calculated on the frontend from amount / price.
+                // Backend does not require manual Kg entry here.
             }
             else
             {
-                if (line.Qty <= 0)
+                if (line.UnitPrice <= 0)
                 {
-                    ModelState.AddModelError("", "Quantity must be greater than zero.");
+                    ModelState.AddModelError("", "Unit price must be greater than zero.");
                     continue;
                 }
 
-                line.Amount = Math.Round(
-                    line.Qty * line.UnitPrice,
-                    2,
-                    MidpointRounding.AwayFromZero
-                );
+                // In By Kg mode, kg is auto-derived from selected product's EquivalentKg × Qty.
+                // No manual Kg entry required.
             }
         }
     }
@@ -596,6 +601,8 @@ public class SalesController : Controller
                 continue;
 
             var unitPrice = (l.UnitPrice > 0m) ? l.UnitPrice : p.DefaultUnitPrice;
+            var eqKg = p.EquivalentKg ?? 0m;
+            var isLpg = eqKg > 0m;
 
             if (l.EntryMode == SaleEntryMode.ByAmount && l.Amount.HasValue && l.Amount.Value > 0)
             {
@@ -657,11 +664,11 @@ public class SalesController : Controller
     }
 
     private (bool Success, string? ErrorMessage, List<SaleItem> Items, decimal Subtotal, decimal TotalLpgKg)
-        BuildSaleItems(
-            SaleCreateVm vm,
-            Dictionary<Guid, Product> prodMap,
-            LpgBatch? activeBatch,
-            string? approvedByUserId)
+      BuildSaleItems(
+          SaleCreateVm vm,
+          Dictionary<Guid, Product> prodMap,
+          LpgBatch? activeBatch,
+          string? approvedByUserId)
     {
         var items = new List<SaleItem>();
         decimal subtotal = 0m;
@@ -671,8 +678,6 @@ public class SalesController : Controller
         {
             if (!line.ProductId.HasValue || !prodMap.TryGetValue(line.ProductId.Value, out var p))
                 continue;
-
-            var qty = line.Qty;
 
             var wantsOverride = line.UnitPrice > 0m && line.UnitPrice != p.DefaultUnitPrice;
             var unitPrice = p.DefaultUnitPrice;
@@ -685,41 +690,87 @@ public class SalesController : Controller
                 unitPrice = line.UnitPrice;
             }
 
-            decimal lineTotal;
-            if (line.EntryMode == SaleEntryMode.ByAmount)
-            {
-                if (!line.Amount.HasValue || line.Amount.Value <= 0)
-                    return (false, "Amount must be greater than zero.", new(), 0m, 0m);
+            var eqKg = p.EquivalentKg ?? 0m;
+            var isLpg = eqKg > 0m;
 
-                lineTotal = line.Amount.Value;
+            decimal qtyToStore = line.Qty;
+            decimal lineTotal;
+            decimal? lpgKg = null;
+
+            if (isLpg)
+            {
+                if (line.Qty <= 0)
+                    return (false, "Quantity must be greater than zero.", new(), 0m, 0m);
+
+                if (line.EntryMode == SaleEntryMode.ByAmount)
+                {
+                    if (!line.Amount.HasValue || line.Amount.Value <= 0)
+                        return (false, "Amount must be greater than zero.", new(), 0m, 0m);
+
+                    if (unitPrice <= 0m)
+                        return (false, "Unit price must be greater than zero.", new(), 0m, 0m);
+
+                    // By Amount:
+                    // Qty = cylinder count
+                    // Total = entered amount
+                    // Kg = amount / price-per-kg
+                    lineTotal = line.Amount.Value;
+                    lpgKg = Math.Round(line.Amount.Value / unitPrice, 2, MidpointRounding.AwayFromZero);
+                }
+                else
+                {
+                    if (eqKg <= 0m)
+                        return (false, $"Product '{p.Name}' does not have a valid EquivalentKg.", new(), 0m, 0m);
+
+                    // By Kg mode in your business flow:
+                    // Qty = number of cylinders
+                    // Total = Qty × unit price
+                    // Kg = Qty × product equivalent kg
+                    lpgKg = Math.Round(line.Qty * eqKg, 2, MidpointRounding.AwayFromZero);
+                    lineTotal = Math.Round(line.Qty * unitPrice, 2, MidpointRounding.AwayFromZero);
+                }
             }
             else
             {
-                lineTotal = qty * unitPrice;
+                if (line.EntryMode == SaleEntryMode.ByAmount)
+                {
+                    if (!line.Amount.HasValue || line.Amount.Value <= 0)
+                        return (false, "Amount must be greater than zero.", new(), 0m, 0m);
+
+                    lineTotal = line.Amount.Value;
+                }
+                else
+                {
+                    if (line.Qty <= 0)
+                        return (false, "Quantity must be greater than zero.", new(), 0m, 0m);
+
+                    lineTotal = Math.Round(line.Qty * unitPrice, 2, MidpointRounding.AwayFromZero);
+                }
             }
 
             var item = new SaleItem
             {
                 ProductId = p.Id,
-                Qty = qty,
+                Qty = qtyToStore,
                 UnitPrice = unitPrice,
                 LineTotal = lineTotal
             };
 
-            var eqKg = p.EquivalentKg ?? 0m;
-            if (eqKg > 0m && activeBatch is not null)
+            if (isLpg)
             {
-                var lpgKg = qty * eqKg;
+                if (activeBatch is null)
+                    return (false, "No ACTIVE LPG batch for your station.", new(), 0m, 0m);
+
                 item.LpgBatchId = activeBatch.Id;
-                item.LpgKg = lpgKg;
+                item.LpgKg = lpgKg ?? 0m;
 
                 if (activeBatch.CostPerKg.HasValue)
                 {
                     item.UnitCostAtSale = activeBatch.CostPerKg.Value;
-                    item.TotalCostAtSale = lpgKg * activeBatch.CostPerKg.Value;
+                    item.TotalCostAtSale = item.LpgKg.Value * activeBatch.CostPerKg.Value;
                 }
 
-                totalLpgKg += lpgKg;
+                totalLpgKg += item.LpgKg.Value;
             }
 
             subtotal += lineTotal;

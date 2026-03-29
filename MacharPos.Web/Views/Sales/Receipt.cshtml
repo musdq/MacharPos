@@ -44,16 +44,33 @@
         </tr>
       </thead>
       <tbody>
-        @foreach (var it in Model.Items)
-        {
-          <tr>
-            <td class="small">
-              <div class="fw-semibold">@it.Product?.Name</div>
-              <div class="text-secondary">@it.Qty.ToString("N2") x ₦@it.UnitPrice.ToString("N2")</div>
-            </td>
-            <td class="small text-end">₦@it.LineTotal.ToString("N2")</td>
-          </tr>
-        }
+      @foreach (var it in Model.Items)
+{
+  var isLpg = (it.LpgKg ?? 0m) > 0m;
+
+  <tr>
+    <td class="small">
+      <div class="fw-semibold">@it.Product?.Name</div>
+
+      @if (isLpg)
+      {
+        <div class="text-secondary">
+@*           @it.Qty.ToString("N0") cyl *@
+          @if (it.LpgKg.HasValue)
+          {
+            <span>@it.LpgKg.Value.ToString("N2") kg</span>
+          }
+          <span>| ₦@it.UnitPrice.ToString("N2")</span>
+        </div>
+      }
+      else
+      {
+        <div class="text-secondary">@it.Qty.ToString("N2") x ₦@it.UnitPrice.ToString("N2")</div>
+      }
+    </td>
+    <td class="small text-end">₦@it.LineTotal.ToString("N2")</td>
+  </tr>
+}
       </tbody>
     </table>
 
@@ -139,12 +156,17 @@ qz.security.setSignaturePromise(function(toSign) {
     out += hr();
 
     // Items
-    for (const it of sale.items){
-      const name = it.name || "Item";
-      const total = money(it.lineTotal);
-      out += padRight(name, LINE_WIDTH - total.length) + total + "\n";
-      out += `  ${Number(it.qty).toFixed(2)} x ${money(it.unitPrice)}\n`;
-    }
+  for (const it of sale.items){
+  const name = it.name || "Item";
+  const total = money(it.lineTotal);
+  out += padRight(name, LINE_WIDTH - total.length) + total + "\n";
+
+  if ((Number(it.lpgKg) || 0) > 0) {
+    out += `  ${Number(it.qty).toFixed(0)} cyl | ${Number(it.lpgKg).toFixed(2)} kg | ${money(it.unitPrice)}\n`;
+  } else {
+    out += `  ${Number(it.qty).toFixed(2)} x ${money(it.unitPrice)}\n`;
+  }
+}
 
     out += hr();
     out += padRight("Subtotal", LINE_WIDTH - money(sale.subtotal).length) + money(sale.subtotal) + "\n";
@@ -210,18 +232,19 @@ data: receipt + feed5 + cutPartial
       subtotal: @Model.Subtotal,
       discountAmount: @Model.DiscountAmount,
       total: @Model.Total,
-      items: [
-        @Html.Raw(string.Join(",",
-          Model.Items.Select(it =>
-            System.Text.Json.JsonSerializer.Serialize(new {
-              name = it.Product?.Name,
-              qty = it.Qty,
-              unitPrice = it.UnitPrice,
-              lineTotal = it.LineTotal
-            })
-          )
-        ))
-      ]
+     items: [
+  @Html.Raw(string.Join(",",
+    Model.Items.Select(it =>
+      System.Text.Json.JsonSerializer.Serialize(new {
+        name = it.Product?.Name,
+        qty = it.Qty,
+        lpgKg = it.LpgKg,
+        unitPrice = it.UnitPrice,
+        lineTotal = it.LineTotal
+      })
+    )
+  ))
+]
     };
 
     try {

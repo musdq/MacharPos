@@ -74,8 +74,9 @@ namespace MacharPos.Web.Controllers
             // KPI: cylinders sold this month
             // Assumption: each cylinder transaction = Qty 1, including "by amount"
             var cylindersSoldThisMonth = sales
-                .SelectMany(s => s.Items)
-                .Sum(i => i.Qty);
+                          .SelectMany(s => s.Items)
+                          .Where(i => (i.LpgKg ?? 0m) > 0m)
+                          .Sum(i => i.Qty);
 
             // KPI: active batch remaining kg
             var activeBatch = await _db.LpgBatches.AsNoTracking()

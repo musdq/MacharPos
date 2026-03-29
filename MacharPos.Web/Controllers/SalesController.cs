@@ -31,15 +31,11 @@ public class SalesController : Controller
         _stationCtx = stationCtx;
         _users = users;
         _signIn = signIn;
-
     }
-
 
     // Normalizes date for DATE column ("date") => Kind must NOT be Utc
     private static DateTime AsDateOnly(DateTime dt)
         => DateTime.SpecifyKind(dt.Date, DateTimeKind.Unspecified);
-
-    
 
     private bool IsAdminOverride()
         => User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
@@ -59,19 +55,27 @@ public class SalesController : Controller
         return (false, $"Operation not allowed. {dateOnly:yyyy-MM-dd} is already closed. Admin only.");
     }
 
-private static string MakeStationCode(string stationName)
+    private static string MakeStationCode(string stationName)
     {
         if (string.IsNullOrWhiteSpace(stationName)) return "STN";
-        // Keep letters/numbers only, take first 3 chars
         var cleaned = new string(stationName.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
         if (cleaned.Length >= 3) return cleaned[..3];
         return cleaned.PadRight(3, 'X');
     }
 
-
     [HttpGet]
-    public async Task<IActionResult> Index(string? quick = null, DateTime? startDate = null, DateTime? endDate = null, Guid? stationId = null)
+    public async Task<IActionResult> Index(
+        string? quick = null,
+        DateTime? startDate = null,
+        DateTime? endDate = null,
+        Guid? stationId = null,
+        int page = 1,
+        int pageSize = 20)
     {
+        if (page < 1) page = 1;
+        if (pageSize <= 0) pageSize = 20;
+        if (pageSize > 200) pageSize = 200;
+
         Guid? stationIdEffective = null;
         if (IsAdminOverride())
         {
@@ -85,9 +89,11 @@ private static string MakeStationCode(string stationName)
         Station? station = null;
         if (stationIdEffective.HasValue)
         {
-            station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationIdEffective.Value);
+            station = await _db.Stations.AsNoTracking()
+                .FirstAsync(s => s.Id == stationIdEffective.Value);
         }
-// Determine range (UTC)
+
+        // Determine range (UTC)
         DateTime utcStart;
         DateTime utcEndExclusive;
 
@@ -102,7 +108,6 @@ private static string MakeStationCode(string stationName)
             }
             else if (quick == "week")
             {
-                // last 7 days
                 utcEndExclusive = now.Date.AddDays(1);
                 utcStart = utcEndExclusive.AddDays(-7);
             }
@@ -129,27 +134,54 @@ private static string MakeStationCode(string stationName)
                 utcEndExclusive = utcStart.AddDays(1);
         }
 
-        var sales = await _db.Sales.AsNoTracking()
+        var baseQuery = _db.Sales.AsNoTracking()
             .Include(s => s.Station)
-            .Include(s => s.Items).ThenInclude(i => i.Product)
             .Include(s => s.Customer)
-            .Where(s => (!stationIdEffective.HasValue || s.StationId == stationIdEffective.Value) && s.CreatedAt >= utcStart && s.CreatedAt < utcEndExclusive)
+            .Where(s =>
+                (!stationIdEffective.HasValue || s.StationId == stationIdEffective.Value) &&
+                s.CreatedAt >= utcStart &&
+                s.CreatedAt < utcEndExclusive);
+
+        var total = await baseQuery
+            .Where(s => s.Status == SaleStatus.Completed)
+            .SumAsync(s => (decimal?)s.Total) ?? 0m;
+
+        var totalCount = await baseQuery.CountAsync();
+
+        var sales = await baseQuery
             .OrderByDescending(s => s.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(s => s.Items).ThenInclude(i => i.Product)
             .ToListAsync();
+
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
         ViewBag.StationName = station?.Name ?? "All Stations";
         ViewBag.StationId = stationIdEffective?.ToString();
+
         if (IsAdminOverride())
         {
-            ViewBag.Stations = await _db.Stations.AsNoTracking().OrderBy(s => s.Name)
-                .Select(s => new SelectListItem(s.Name, s.Id.ToString(), stationIdEffective.HasValue && s.Id == stationIdEffective.Value))
+            ViewBag.Stations = await _db.Stations.AsNoTracking()
+                .OrderBy(s => s.Name)
+                .Select(s => new SelectListItem(
+                    s.Name,
+                    s.Id.ToString(),
+                    stationIdEffective.HasValue && s.Id == stationIdEffective.Value))
                 .ToListAsync();
         }
+
         ViewBag.Quick = quick;
         ViewBag.StartDate = utcStart.ToString("yyyy-MM-dd");
         ViewBag.EndDate = utcEndExclusive.AddDays(-1).ToString("yyyy-MM-dd");
+        ViewBag.Total = total;
 
-        ViewBag.Total = sales.Where(s => s.Status == SaleStatus.Completed).Sum(s => s.Total);
+        ViewBag.Page = page;
+        ViewBag.PageSize = pageSize;
+        ViewBag.TotalCount = totalCount;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.HasPreviousPage = page > 1;
+        ViewBag.HasNextPage = page < totalPages;
 
         return View(sales);
     }
@@ -199,14 +231,12 @@ private static string MakeStationCode(string stationName)
             return RedirectToAction(nameof(Details), new { id });
         }
 
-
         if (sale.Status == SaleStatus.Voided)
         {
             TempData["Err"] = "Sale is already voided.";
             return RedirectToAction(nameof(Details), new { id });
         }
 
-        // Do not allow voiding credit sales once payments have been received.
         var hasPayments = await _db.CreditPayments.AnyAsync(p => p.SaleId == sale.Id);
         if (hasPayments)
         {
@@ -217,7 +247,6 @@ private static string MakeStationCode(string stationName)
         using var tx = await _db.Database.BeginTransactionAsync();
         try
         {
-            // Reverse LPG batch sold Kg if needed
             var lpgByBatch = sale.Items
                 .Where(i => i.LpgBatchId.HasValue && (i.LpgKg ?? 0m) > 0m)
                 .GroupBy(i => i.LpgBatchId!.Value)
@@ -231,13 +260,13 @@ private static string MakeStationCode(string stationName)
                     .Where(b => b.StationId == stationId && batchIds.Contains(b.Id))
                     .ToListAsync();
 
-
                 foreach (var grp in lpgByBatch)
                 {
                     var batch = batches.FirstOrDefault(b => b.Id == grp.BatchId);
                     if (batch is null) continue;
                     batch.SoldKg = Math.Max(0m, batch.SoldKg - grp.Kg);
                 }
+
                 await _db.SaveChangesAsync();
             }
 
@@ -264,18 +293,15 @@ private static string MakeStationCode(string stationName)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        
-
         var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
             return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
-// Phase 1 control: warn if previous business day wasn't closed
+
         var yesterdayDateOnly = AsDateOnly(DateTime.Today.AddDays(-1));
 
-        // Only warn if this station has any prior activity (sales before today)
         var hasPriorActivity = await _db.Sales.AsNoTracking()
             .AnyAsync(s => s.StationId == stationId && s.CreatedAt < DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
 
@@ -291,7 +317,6 @@ private static string MakeStationCode(string stationName)
             }
         }
 
-        // Customers for station, default Walk-in
         var customers = await _db.Customers.AsNoTracking()
             .Where(c => c.StationId == stationId && c.IsActive)
             .OrderBy(c => c.Name)
@@ -299,14 +324,12 @@ private static string MakeStationCode(string stationName)
 
         var walkin = customers.FirstOrDefault(c => c.Name == "Walk-in");
 
-        // Products (active only)
         var products = await _db.Products.AsNoTracking()
             .Where(p => p.IsActive)
             .OrderBy(p => p.Name)
             .ToListAsync();
 
         ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
-
 
         var vm = new SaleCreateVm
         {
@@ -328,13 +351,13 @@ private static string MakeStationCode(string stationName)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-
         var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
             return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
+
         var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
@@ -345,12 +368,12 @@ private static string MakeStationCode(string stationName)
 
         var prodMap = await LoadProductsMapAsync(vm);
 
-        // Determine if we need LPG batch + if we need manager approval
         var needsLpgBatch = vm.Lines.Any(l =>
-      l.ProductId.HasValue &&
-      prodMap.TryGetValue(l.ProductId.Value, out var p) &&
-      (p.EquivalentKg ?? 0m) > 0m
-  );
+            l.ProductId.HasValue &&
+            prodMap.TryGetValue(l.ProductId.Value, out var p) &&
+            (p.EquivalentKg ?? 0m) > 0m
+        );
+
         var hasPriceOverride = HasPriceOverride(vm, prodMap);
         var discount = NormalizeDiscount(vm.DiscountAmount);
 
@@ -360,7 +383,6 @@ private static string MakeStationCode(string stationName)
             return View(vm);
         }
 
-        // ✅ FIX: declare approvedByUserId BEFORE it’s used
         string? approvedByUserId = null;
 
         if (discount > 0 || hasPriceOverride)
@@ -379,15 +401,13 @@ private static string MakeStationCode(string stationName)
             : null;
 
         if (needsLpgBatch && activeBatch is null)
-            return View(vm); // error already added
+            return View(vm);
 
-        // Save transactionally (includes receipt sequence lock)
         using var tx = await _db.Database.BeginTransactionAsync();
         try
         {
             var receiptNo = await GenerateReceiptNoAsync(stationId);
 
-            // Build sale + items
             var sale = BuildSaleSkeleton(vm, stationId, user.Id, receiptNo);
 
             var build = BuildSaleItems(vm, prodMap, activeBatch, approvedByUserId);
@@ -404,7 +424,6 @@ private static string MakeStationCode(string stationName)
             sale.DiscountApprovedByUserId = approvedByUserId;
             sale.DiscountApprovedAt = (discount > 0) ? DateTime.UtcNow : null;
 
-            // Stock validation for LPG batch
             if (activeBatch is not null && build.TotalLpgKg > 0m && activeBatch.RemainingKg < build.TotalLpgKg)
             {
                 ModelState.AddModelError("",
@@ -413,6 +432,7 @@ private static string MakeStationCode(string stationName)
             }
 
             _db.Sales.Add(sale);
+
             var dto = new SaleSyncDto
             {
                 Id = sale.Id,
@@ -436,7 +456,6 @@ private static string MakeStationCode(string stationName)
                 Synced = false
             });
 
-
             await _db.SaveChangesAsync();
 
             if (activeBatch is not null && build.TotalLpgKg > 0m)
@@ -455,6 +474,7 @@ private static string MakeStationCode(string stationName)
             throw;
         }
     }
+
     private async Task PopulateDropdownsAsync(SaleCreateVm vm, Guid stationId)
     {
         var customers = await _db.Customers.AsNoTracking()
@@ -566,7 +586,6 @@ private static string MakeStationCode(string stationName)
         return discount < 0 ? 0 : discount;
     }
 
-    // Used only for discount sanity-check before building items
     private decimal CalculateSubtotalPreview(SaleCreateVm vm, Dictionary<Guid, Product> prodMap)
     {
         decimal subtotal = 0m;
@@ -595,30 +614,24 @@ private static string MakeStationCode(string stationName)
     {
         var batch = await _db.LpgBatches
             .FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == LpgBatchStatus.Active);
-     
+
         if (batch is null)
             ModelState.AddModelError("", "No ACTIVE LPG batch for your station. Create and activate a batch before LPG refill sales.");
 
-      
         return batch;
     }
 
     private async Task<string> GenerateReceiptNoAsync(Guid stationId)
     {
-
         var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
         var stationCode = MakeStationCode(station.Name);
 
-        // Receipt numbering is per station per UTC day.
-        // To avoid duplicates under concurrency, we serialize receipt generation using a PostgreSQL advisory transaction lock.
         var utcDayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
         var utcDayEnd = utcDayStart.AddDays(1);
 
-        // Stable per-station key (avoid Guid.GetHashCode which is process-random)
         var stationKey = BitConverter.ToInt32(stationId.ToByteArray(), 0);
         var dayKey = int.Parse(DateTime.UtcNow.ToString("yyyyMMdd"));
 
-        // Holds until the surrounding DB transaction commits/rolls back
         await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, {1});", stationKey, dayKey);
 
         var todayCount = await _db.Sales.AsNoTracking()
@@ -627,7 +640,6 @@ private static string MakeStationCode(string stationName)
 
         var receiptSeq = todayCount + 1;
         return $"{stationCode}-{utcDayStart:yyyyMMdd}-{receiptSeq:000000}";
-
     }
 
     private Sale BuildSaleSkeleton(SaleCreateVm vm, Guid stationId, string soldByUserId, string receiptNo)
@@ -645,11 +657,11 @@ private static string MakeStationCode(string stationName)
     }
 
     private (bool Success, string? ErrorMessage, List<SaleItem> Items, decimal Subtotal, decimal TotalLpgKg)
-     BuildSaleItems(
-         SaleCreateVm vm,
-         Dictionary<Guid, Product> prodMap,
-         LpgBatch? activeBatch,
-         string? approvedByUserId)
+        BuildSaleItems(
+            SaleCreateVm vm,
+            Dictionary<Guid, Product> prodMap,
+            LpgBatch? activeBatch,
+            string? approvedByUserId)
     {
         var items = new List<SaleItem>();
         decimal subtotal = 0m;
@@ -740,7 +752,6 @@ private static string MakeStationCode(string stationName)
         return (true, null, mgr.Id);
     }
 
-
     [HttpGet]
     public async Task<IActionResult> Receipt(Guid id)
     {
@@ -776,7 +787,8 @@ private static string MakeStationCode(string stationName)
         {
             station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationIdEffective.Value);
         }
-DateTime utcStart;
+
+        DateTime utcStart;
         DateTime utcEndExclusive;
         var now = DateTime.UtcNow;
 
@@ -809,7 +821,6 @@ DateTime utcStart;
             var s = (startDate?.Date ?? now.Date);
             var e = (endDate?.Date ?? s);
 
-            // IMPORTANT: mark as UTC so Npgsql accepts it for timestamptz comparisons
             utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
             utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
 

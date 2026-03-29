@@ -165,7 +165,9 @@
                 </div>
             </div>
 
-            <button class="btn btn-dark w-100 mt-3">Complete Sale</button>
+            <button type="submit" class="btn btn-dark w-100 mt-3" id="completeSaleBtn">
+                <span class="btn-text">Complete Sale</span>
+            </button>
         </form>
     </div>
 </div>
@@ -475,5 +477,35 @@
           const firstRow = document.querySelector('#linesTable tbody tr');
           if (firstRow) focusProductOnRow(firstRow);
         });
+
+                let saleSubmitting = false;
+
+        function lockSaleSubmit() {
+          const form = document.getElementById('saleForm');
+          const btn = document.getElementById('completeSaleBtn');
+          if (!form || !btn) return;
+
+          saleSubmitting = true;
+          form.dataset.submitting = "true";
+          btn.disabled = true;
+          btn.classList.add('disabled');
+
+          const text = btn.querySelector('.btn-text');
+          if (text) text.textContent = 'Processing...';
+        }
+
+        function unlockSaleSubmit() {
+          const form = document.getElementById('saleForm');
+          const btn = document.getElementById('completeSaleBtn');
+          if (!form || !btn) return;
+
+          saleSubmitting = false;
+          form.dataset.submitting = "false";
+          btn.disabled = false;
+          btn.classList.remove('disabled');
+
+          const text = btn.querySelector('.btn-text');
+          if (text) text.textContent = 'Complete Sale';
+        }
     </script>
 }

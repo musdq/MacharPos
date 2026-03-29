@@ -7,99 +7,214 @@
     var startDate = (string)ViewBag.StartDate;
     var endDate = (string)ViewBag.EndDate;
     var total = (decimal)ViewBag.Total;
+    var stationId = ViewBag.StationId as string;
+
+    var currentPage = (int)(ViewBag.Page ?? 1);
+    var pageSize = (int)(ViewBag.PageSize ?? 20);
+    var totalCount = (int)(ViewBag.TotalCount ?? 0);
+    var totalPages = (int)(ViewBag.TotalPages ?? 0);
+    var hasPreviousPage = (bool)(ViewBag.HasPreviousPage ?? false);
+    var hasNextPage = (bool)(ViewBag.HasNextPage ?? false);
 }
 
 <div class="d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h1 class="h5 mb-0">Sales History</h1>
-    <div class="text-secondary small">Station: <span class="fw-semibold">@stationName</span></div>
-  </div>
-  <div class="d-flex gap-2">
-    <a class="btn btn-dark btn-sm" asp-action="New">New Sale</a>
-    <a class="btn btn-outline-success btn-sm"
-       asp-action="Export"
-       asp-route-quick="@quick"
-       asp-route-startDate="@startDate"
-       asp-route-endDate="@endDate">Export Excel</a>
-  </div>
+    <div>
+        <h1 class="h5 mb-0">Sales History</h1>
+        <div class="text-secondary small">Station: <span class="fw-semibold">@stationName</span></div>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-dark btn-sm" asp-action="New">New Sale</a>
+        <a class="btn btn-outline-success btn-sm"
+           asp-action="Export"
+           asp-route-quick="@quick"
+           asp-route-startDate="@startDate"
+           asp-route-endDate="@endDate"
+           asp-route-stationId="@stationId">Export Excel</a>
+    </div>
 </div>
 
 <div class="card shadow-sm mb-3">
-  <div class="card-body">
-    <form class="row g-2 align-items-end" method="get">
-      <div class="col-12 col-md-3">
-        <label class="form-label">Quick</label>
-        <select class="form-select" name="quick">
-          <option value="">Custom</option>
-          <option value="today" selected="@(quick=="today")">Today</option>
-          <option value="week" selected="@(quick=="week")">Last 7 days</option>
-          <option value="month" selected="@(quick=="month")">This month</option>
-        </select>
-      </div>
+    <div class="card-body">
+        <form class="row g-2 align-items-end" method="get">
+            <input type="hidden" name="page" value="1" />
 
-      <div class="col-6 col-md-3">
-        <label class="form-label">Start</label>
-        <input class="form-control" type="date" name="startDate" value="@startDate" />
-      </div>
+            @if (!string.IsNullOrWhiteSpace(stationId))
+            {
+                <input type="hidden" name="stationId" value="@stationId" />
+            }
 
-      <div class="col-6 col-md-3">
-        <label class="form-label">End</label>
-        <input class="form-control" type="date" name="endDate" value="@endDate" />
-      </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Quick</label>
+                <select class="form-select" name="quick">
+                    <option value="">Custom</option>
+                    <option value="today" selected="@(quick == "today")">Today</option>
+                    <option value="week" selected="@(quick == "week")">Last 7 days</option>
+                    <option value="month" selected="@(quick == "month")">This month</option>
+                </select>
+            </div>
 
-      <div class="col-12 col-md-3">
-        <button class="btn btn-outline-primary w-100">Apply</button>
-      </div>
-    </form>
+            <div class="col-6 col-md-3">
+                <label class="form-label">Start</label>
+                <input class="form-control" type="date" name="startDate" value="@startDate" />
+            </div>
 
-    <div class="mt-3 small text-secondary">Total in range: <span class="fw-semibold">₦@total.ToString("N2")</span></div>
-  </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label">End</label>
+                <input class="form-control" type="date" name="endDate" value="@endDate" />
+            </div>
+
+            <div class="col-12 col-md-3">
+                <button class="btn btn-outline-primary w-100">Apply</button>
+            </div>
+        </form>
+
+        <div class="mt-3 small text-secondary d-flex flex-wrap gap-3">
+            <div>Total in range: <span class="fw-semibold">₦@total.ToString("N2")</span></div>
+            <div>Records: <span class="fw-semibold">@totalCount</span></div>
+            <div>Page: <span class="fw-semibold">@currentPage</span> / <span class="fw-semibold">@Math.Max(totalPages, 1)</span></div>
+        </div>
+    </div>
 </div>
 
 <div class="card shadow-sm">
-  <div class="card-body">
-    <div class="table-responsive">
-      <table class="table table-sm align-middle">
-        <thead>
-          <tr>
-            <th>Date/Time</th>
-            <th>Receipt</th>
-            <th>Customer</th>
-            <th>Payment</th>
-            <th>Status</th>
-            <th class="text-end">Total</th>
-            <th class="text-end"></th>
-          </tr>
-        </thead>
-        <tbody>
-          @foreach (var s in Model)
-          {
-            <tr>
-              <td>@s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-              <td class="fw-semibold">@s.ReceiptNo</td>
-              <td>@(s.Customer?.Name ?? "Walk-in")</td>
-              <td>@s.PaymentMethod</td>
-              <td>
-                @if (s.Status == MacharPos.Core.Entities.SaleStatus.Voided)
-                {
-                  <span class="badge text-bg-danger">VOID</span>
-                }
-                else
-                {
-                  <span class="badge text-bg-success">OK</span>
-                }
-              </td>
-              <td class="text-end">@s.Total.ToString("N2")</td>
-              <td class="text-end">
-                <div class="d-flex justify-content-end gap-2">
-                  <a class="btn btn-outline-secondary btn-sm" asp-action="Details" asp-route-id="@s.Id">Details</a>
-                  <a class="btn btn-outline-secondary btn-sm" asp-action="Receipt" asp-route-id="@s.Id">Receipt</a>
-                </div>
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Date/Time</th>
+                        <th>Receipt</th>
+                        <th>Customer</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Any())
+                    {
+                        @foreach (var s in Model)
+                        {
+                            <tr>
+                                <td>@s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                <td class="fw-semibold">@s.ReceiptNo</td>
+                                <td>@(s.Customer?.Name ?? "Walk-in")</td>
+                                <td>@s.PaymentMethod</td>
+                                <td>
+                                    @if (s.Status == MacharPos.Core.Entities.SaleStatus.Voided)
+                                    {
+                                        <span class="badge text-bg-danger">VOID</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-success">OK</span>
+                                    }
+                                </td>
+                                <td class="text-end">@s.Total.ToString("N2")</td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <a class="btn btn-outline-secondary btn-sm" asp-action="Details" asp-route-id="@s.Id">Details</a>
+                                        <a class="btn btn-outline-secondary btn-sm" asp-action="Receipt" asp-route-id="@s.Id">Receipt</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">No sales found for this range.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (totalPages > 1)
+        {
+            <nav class="mt-3">
+                <ul class="pagination pagination-sm justify-content-end mb-0">
+                    <li class="page-item @(hasPreviousPage ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-quick="@quick"
+                           asp-route-startDate="@startDate"
+                           asp-route-endDate="@endDate"
+                           asp-route-stationId="@stationId"
+                           asp-route-page="@(currentPage - 1)"
+                           asp-route-pageSize="@pageSize">Previous</a>
+                    </li>
+
+                    @{
+                        var startPage = Math.Max(1, currentPage - 2);
+                        var endPage = Math.Min(totalPages, currentPage + 2);
+                    }
+
+                    @if (startPage > 1)
+                    {
+                        <li class="page-item">
+                            <a class="page-link"
+                               asp-action="Index"
+                               asp-route-quick="@quick"
+                               asp-route-startDate="@startDate"
+                               asp-route-endDate="@endDate"
+                               asp-route-stationId="@stationId"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">1</a>
+                        </li>
+
+                        @if (startPage > 2)
+                        {
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        }
+                    }
+
+                    @for (int p = startPage; p <= endPage; p++)
+                    {
+                        <li class="page-item @(p == currentPage ? "active" : "")">
+                            <a class="page-link"
+                               asp-action="Index"
+                               asp-route-quick="@quick"
+                               asp-route-startDate="@startDate"
+                               asp-route-endDate="@endDate"
+                               asp-route-stationId="@stationId"
+                               asp-route-page="@p"
+                               asp-route-pageSize="@pageSize">@p</a>
+                        </li>
+                    }
+
+                    @if (endPage < totalPages)
+                    {
+                        @if (endPage < totalPages - 1)
+                        {
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        }
+
+                        <li class="page-item">
+                            <a class="page-link"
+                               asp-action="Index"
+                               asp-route-quick="@quick"
+                               asp-route-startDate="@startDate"
+                               asp-route-endDate="@endDate"
+                               asp-route-stationId="@stationId"
+                               asp-route-page="@totalPages"
+                               asp-route-pageSize="@pageSize">@totalPages</a>
+                        </li>
+                    }
+
+                    <li class="page-item @(hasNextPage ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-quick="@quick"
+                           asp-route-startDate="@startDate"
+                           asp-route-endDate="@endDate"
+                           asp-route-stationId="@stationId"
+                           asp-route-page="@(currentPage + 1)"
+                           asp-route-pageSize="@pageSize">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        }
     </div>
-  </div>
 </div>

@@ -95,9 +95,10 @@
                 <tbody>
                     @if (Model.Any())
                     {
+                        var index = 1;
                         @foreach (var s in Model)
                         {
-                            var index = 1;
+                          
                             <tr>
                                 <td>@index</td>
                                 <td>@s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>

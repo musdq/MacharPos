@@ -306,7 +306,7 @@ public class DailyCloseController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "SuperAdmin")]
+    [Authorize(Roles = "Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SuperRecalculate(
         DateTime closeDate,

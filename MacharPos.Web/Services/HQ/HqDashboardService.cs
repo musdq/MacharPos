@@ -194,6 +194,7 @@ public class HqDashboardService : IHqDashboardService
         return new HqDashboardVm
         {
             ReportDate = reportDateLocal.Date,
+            TotalSalesCount = await salesQ.CountAsync(),
             TotalSalesAmount = totals.Total,
             CashAmount = totals.Cash,
             PosAmount = totals.Pos,

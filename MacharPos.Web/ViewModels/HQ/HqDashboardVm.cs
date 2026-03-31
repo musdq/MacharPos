@@ -7,6 +7,8 @@ public class HqDashboardVm
     // Headline totals (all stations)
     public decimal TotalSalesAmount { get; set; }
 
+    public int TotalSalesCount { get; set; }
+
     // Phase 6.2 (Margin Engine)
     public decimal TotalCostAmount { get; set; }
     public decimal GrossProfitAmount { get; set; }

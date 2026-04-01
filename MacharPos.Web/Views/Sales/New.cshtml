@@ -48,7 +48,7 @@
                 <div class="col-12 col-md-6">
                     <label class="form-label">Customer</label>
                     <select class="form-select" asp-for="CustomerId" asp-items="Model.Customers" id="CustomerId"></select>
-                    <div class="form-text">Default is Walk-in.</div>
+                    <div class="form-text">Search by customer name or phone number. Default is Walk-in.</div>
                 </div>
 
                 <div class="col-12 col-md-6">
@@ -548,7 +548,28 @@
           });
         }
 
+        function initCustomerSelect() {
+          const customerSelect = document.getElementById("CustomerId");
+          if (!customerSelect) return;
+
+          if (customerSelect.tomselect) {
+            customerSelect.tomselect.destroy();
+          }
+
+          new TomSelect(customerSelect, {
+            create: false,
+            allowEmptyOption: true,
+            placeholder: "Search customer by name or phone...",
+            maxOptions: 200,
+            onChange: function () {
+              refreshCustomerLoyalty();
+            }
+          });
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
+            initCustomerSelect();
+
           document.querySelectorAll(".product-select").forEach(s => {
             new TomSelect(s, {
               create: false,

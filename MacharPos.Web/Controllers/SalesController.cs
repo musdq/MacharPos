@@ -297,7 +297,6 @@ public class SalesController : Controller
             throw;
         }
     }
-
     [HttpGet]
     public async Task<IActionResult> New()
     {
@@ -345,7 +344,14 @@ public class SalesController : Controller
         var vm = new SaleCreateVm
         {
             CustomerId = walkin?.Id,
-            Customers = customers.Select(c => new SelectListItem(c.Name, c.Id.ToString(), c.Id == walkin?.Id)).ToList(),
+            Customers = customers.Select(c => new SelectListItem(
+                c.Name == "Walk-in"
+                    ? "Walk-in"
+                    : string.IsNullOrWhiteSpace(c.Phone)
+                        ? c.Name
+                        : $"{c.Name} — {c.Phone}",
+                c.Id.ToString(),
+                c.Id == walkin?.Id)).ToList(),
             Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList(),
             PaymentMethods = Enum.GetValues<PaymentMethod>().Where(pm => pm != PaymentMethod.Credit)
                 .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == PaymentMethod.Cash))

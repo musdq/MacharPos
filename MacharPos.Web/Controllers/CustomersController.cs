@@ -21,18 +21,37 @@ public class CustomersController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(bool showInactive = false)
+    public async Task<IActionResult> Index(bool showInactive = false, string? search = null)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
 
-        var q = _db.Customers.AsNoTracking().Where(c => c.StationId == stationId);
-        if (!showInactive) q = q.Where(c => c.IsActive);
+        var station = await _db.Stations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == stationId);
 
-        var customers = await q.OrderBy(c => c.Name).ToListAsync();
+        IQueryable<Customer> query = _db.Customers
+            .AsNoTracking()
+            .Where(x => x.StationId == stationId);
 
-        ViewBag.StationName = station.Name;
+        if (!showInactive)
+            query = query.Where(x => x.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            search = search.Trim();
+
+            query = query.Where(x =>
+                x.Name.Contains(search) ||
+                (x.Phone != null && x.Phone.Contains(search)));
+        }
+
+        var customers = await query
+            .OrderBy(x => x.Name)
+            .ToListAsync();
+
+        ViewBag.StationName = station?.Name ?? "Unknown";
         ViewBag.ShowInactive = showInactive;
+        ViewBag.Search = search ?? "";
 
         return View(customers);
     }

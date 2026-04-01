@@ -46,7 +46,16 @@
 
             <div class="row g-2">
                 <div class="col-12 col-md-6">
-                    <label class="form-label">Customer</label>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <label class="form-label mb-1">Customer</label>
+                        <button type="button"
+                                class="btn btn-outline-primary btn-sm"
+                                data-bs-toggle="modal"
+                                data-bs-target="#quickCustomerModal">
+                            + New Customer
+                        </button>
+                    </div>
+
                     <select class="form-select" asp-for="CustomerId" asp-items="Model.Customers" id="CustomerId"></select>
                     <div class="form-text">Search by customer name or phone number. Default is Walk-in.</div>
                 </div>
@@ -214,6 +223,55 @@
                 <span class="btn-text">Complete Sale</span>
             </button>
         </form>
+    </div>
+
+    <div class="modal fade" id="quickCustomerModal" tabindex="-1" aria-labelledby="quickCustomerModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="quickCustomerForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="quickCustomerModalLabel">Add New Customer</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div id="quickCustomerError" class="alert alert-danger d-none"></div>
+                        <div id="quickCustomerSuccess" class="alert alert-success d-none"></div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="Name" id="QuickCustomerName" required />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Phone</label>
+                            <input type="text" class="form-control" name="Phone" id="QuickCustomerPhone" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Address</label>
+                            <textarea class="form-control" name="Address" id="QuickCustomerAddress" rows="2"></textarea>
+                        </div>
+
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="IsLoyaltyEnabled" id="QuickCustomerLoyaltyEnabled" checked />
+                            <label class="form-check-label" for="QuickCustomerLoyaltyEnabled">
+                                Enable loyalty for this customer
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-dark" id="quickCustomerSaveBtn">
+                            <span class="btn-text">Save Customer</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -570,6 +628,22 @@
         document.addEventListener("DOMContentLoaded", function () {
             initCustomerSelect();
 
+         const quickCustomerForm = document.getElementById("quickCustomerForm");
+        if (quickCustomerForm) {
+          quickCustomerForm.addEventListener("submit", submitQuickCustomerForm);
+        }
+
+        const quickCustomerModal = document.getElementById("quickCustomerModal");
+        if (quickCustomerModal) {
+          quickCustomerModal.addEventListener("shown.bs.modal", function () {
+            document.getElementById("QuickCustomerName")?.focus();
+          });
+
+          quickCustomerModal.addEventListener("hidden.bs.modal", function () {
+            resetQuickCustomerForm();
+          });
+        }
+
           document.querySelectorAll(".product-select").forEach(s => {
             new TomSelect(s, {
               create: false,
@@ -590,5 +664,167 @@
             btn.querySelector(".btn-text").innerText = "Processing...";
           });
         });
+    </script>
+    <script>
+        function getAntiForgeryToken() {
+          const tokenInput = document.querySelector('#quickCustomerForm input[name="__RequestVerificationToken"]')
+            || document.querySelector('#saleForm input[name="__RequestVerificationToken"]');
+          return tokenInput ? tokenInput.value : "";
+        }
+
+        function resetQuickCustomerForm() {
+          const form = document.getElementById("quickCustomerForm");
+          if (form) form.reset();
+
+          const errorEl = document.getElementById("quickCustomerError");
+          const successEl = document.getElementById("quickCustomerSuccess");
+
+          if (errorEl) {
+            errorEl.classList.add("d-none");
+            errorEl.textContent = "";
+          }
+
+          if (successEl) {
+            successEl.classList.add("d-none");
+            successEl.textContent = "";
+          }
+
+          const loyaltyCheckbox = document.getElementById("QuickCustomerLoyaltyEnabled");
+          if (loyaltyCheckbox) loyaltyCheckbox.checked = true;
+        }
+
+        function showQuickCustomerError(message) {
+          const errorEl = document.getElementById("quickCustomerError");
+          const successEl = document.getElementById("quickCustomerSuccess");
+
+          if (successEl) {
+            successEl.classList.add("d-none");
+            successEl.textContent = "";
+          }
+
+          if (errorEl) {
+            errorEl.textContent = message || "Unable to save customer.";
+            errorEl.classList.remove("d-none");
+          }
+        }
+
+        function addCustomerToSelectAndChoose(customer) {
+          const customerSelect = document.getElementById("CustomerId");
+          if (!customerSelect) return;
+
+          const text = customer.phone
+            ? `${customer.name} (${customer.phone})`
+            : customer.name;
+
+          if (customerSelect.tomselect) {
+            const ts = customerSelect.tomselect;
+
+            if (!ts.options[customer.id]) {
+              ts.addOption({
+                value: customer.id,
+                text: text
+              });
+            }
+
+            ts.setValue(customer.id);
+            ts.refreshOptions(false);
+          } else {
+            let existing = Array.from(customerSelect.options).find(o => o.value === customer.id);
+
+            if (!existing) {
+              const opt = document.createElement("option");
+              opt.value = customer.id;
+              opt.text = text;
+              customerSelect.appendChild(opt);
+            }
+
+            customerSelect.value = customer.id;
+          }
+
+          refreshCustomerLoyalty();
+        }
+
+        async function submitQuickCustomerForm(e) {
+          e.preventDefault();
+
+          const form = document.getElementById("quickCustomerForm");
+          const saveBtn = document.getElementById("quickCustomerSaveBtn");
+          const btnText = saveBtn?.querySelector(".btn-text");
+
+          const errorEl = document.getElementById("quickCustomerError");
+          const successEl = document.getElementById("quickCustomerSuccess");
+
+          if (errorEl) {
+            errorEl.classList.add("d-none");
+            errorEl.textContent = "";
+          }
+
+          if (successEl) {
+            successEl.classList.add("d-none");
+            successEl.textContent = "";
+          }
+
+          const formData = new FormData(form);
+
+          if (!formData.get("IsLoyaltyEnabled")) {
+            formData.set("IsLoyaltyEnabled", "false");
+          }
+
+          saveBtn.disabled = true;
+          if (btnText) btnText.textContent = "Saving...";
+
+          try {
+            const response = await fetch('/Customers/QuickCreate', {
+              method: 'POST',
+              headers: {
+                'RequestVerificationToken': getAntiForgeryToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+              },
+              body: formData
+            });
+
+            const data = await response.json();
+
+                if (!response.ok || !data.ok) {
+          if (data.existingCustomerId) {
+            addCustomerToSelectAndChoose({
+              id: data.existingCustomerId,
+              name: data.existingCustomerName,
+              phone: formData.get("Phone") || ""
+            });
+
+            const modalEl = document.getElementById("quickCustomerModal");
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal?.hide();
+
+            resetQuickCustomerForm();
+            return;
+          }
+
+          showQuickCustomerError(data.message || "Unable to save customer.");
+          return;
+        }
+
+            addCustomerToSelectAndChoose(data);
+
+            if (successEl) {
+              successEl.textContent = "Customer added successfully.";
+              successEl.classList.remove("d-none");
+            }
+
+            setTimeout(() => {
+              const modalEl = document.getElementById("quickCustomerModal");
+              const modal = bootstrap.Modal.getInstance(modalEl);
+              modal?.hide();
+              resetQuickCustomerForm();
+            }, 500);
+          } catch (err) {
+            console.error(err);
+            showQuickCustomerError("Something went wrong while saving the customer.");
+          } finally {
+            saveBtn.disabled = false;
+            if (btnText) btnText.textContent = "Save Customer";
+          }
+        }
     </script>
 }

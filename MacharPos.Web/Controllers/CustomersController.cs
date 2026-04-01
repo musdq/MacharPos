@@ -213,4 +213,76 @@ public class CustomersController : Controller
 
         return RedirectToAction(nameof(Index));
     }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin,StationManager,Cashier")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> QuickCreate([FromForm] QuickCreateCustomerVm vm)
+    {
+        if (string.IsNullOrWhiteSpace(vm.Name))
+        {
+            return BadRequest(new
+            {
+                ok = false,
+                message = "Customer name is required."
+            });
+        }
+
+        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+        var trimmedName = vm.Name.Trim();
+        var trimmedPhone = string.IsNullOrWhiteSpace(vm.Phone) ? null : vm.Phone.Trim();
+        var trimmedAddress = string.IsNullOrWhiteSpace(vm.Address) ? null : vm.Address.Trim();
+
+        if (!string.IsNullOrWhiteSpace(trimmedPhone))
+        {
+            var existingPhone = await _db.Customers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c =>
+                    c.StationId == stationId &&
+                    c.Phone != null &&
+                    c.Phone == trimmedPhone);
+
+            if (existingPhone != null)
+            {
+                return BadRequest(new
+                {
+                    ok = false,
+                    message = "A customer with this phone number already exists.",
+                    existingCustomerId = existingPhone.Id,
+                    existingCustomerName = existingPhone.Name
+                });
+            }
+        }
+
+        var customer = new Customer
+        {
+            StationId = stationId,
+            Name = trimmedName,
+            Phone = trimmedPhone,
+            Address = trimmedAddress,
+            IsActive = true,
+
+            IsCreditApproved = false,
+            CreditLimit = 0m,
+            CreditDueDays = 0,
+
+            IsLoyaltyEnabled = vm.IsLoyaltyEnabled,
+            LoyaltyStampCount = 0,
+            LoyaltyAvailableRewards = 0,
+            LoyaltyLifetimeEarned = 0,
+            LoyaltyLifetimeRedeemed = 0
+        };
+
+        _db.Customers.Add(customer);
+        await _db.SaveChangesAsync();
+
+        return Json(new
+        {
+            ok = true,
+            id = customer.Id,
+            name = customer.Name,
+            phone = customer.Phone,
+            loyaltyEnabled = customer.IsLoyaltyEnabled
+        });
+    }
 }

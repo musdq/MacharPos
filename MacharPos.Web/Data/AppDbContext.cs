@@ -20,6 +20,8 @@ namespace MacharPos.Web.Data
         public DbSet<Sale> Sales => Set<Sale>();
         public DbSet<SaleItem> SaleItems => Set<SaleItem>();
 
+        public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
+
         public DbSet<DailyClose> DailyCloses => Set<DailyClose>();
 
         public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
@@ -88,6 +90,16 @@ namespace MacharPos.Web.Data
             b.Entity<Sale>()
               .Property(x => x.CreditDueDate)
               .HasColumnType("date");
+
+            b.Entity<LoyaltyTransaction>()
+            .Property(x => x.CreatedAt)
+            .HasColumnType("timestamp with time zone");
+
+            b.Entity<LoyaltyTransaction>()
+                .HasIndex(x => new { x.StationId, x.CustomerId, x.CreatedAt });
+
+            b.Entity<LoyaltyTransaction>()
+                .HasIndex(x => x.SaleId);
 
 
             // Helpful indexes

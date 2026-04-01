@@ -3,6 +3,7 @@ using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
 using MacharPos.Web.Services.HQ;
+using MacharPos.Web.Services.Loyalty;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -107,6 +108,7 @@ builder.Services.ConfigureApplicationCookie(opt =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IStationContext, StationContext>();
 builder.Services.AddScoped<IHqDashboardService, HqDashboardService>();
+builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 
 var app = builder.Build();
 

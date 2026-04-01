@@ -74,6 +74,21 @@ namespace MacharPos.Web.Migrations
                     b.Property<bool>("IsCreditApproved")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsLoyaltyEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LoyaltyAvailableRewards")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LoyaltyLifetimeEarned")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LoyaltyLifetimeRedeemed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LoyaltyStampCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -187,6 +202,53 @@ namespace MacharPos.Web.Migrations
                         .IsUnique();
 
                     b.ToTable("DailyCloses");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.LoyaltyTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("QualifyingRefillCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RewardDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SaleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("StampDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("SaleId");
+
+                    b.HasIndex("StationId", "CustomerId", "CreatedAt");
+
+                    b.ToTable("LoyaltyTransactions");
                 });
 
             modelBuilder.Entity("MacharPos.Core.Entities.LpgBatch", b =>
@@ -321,6 +383,18 @@ namespace MacharPos.Web.Migrations
 
                     b.Property<bool>("IsCreditSale")
                         .HasColumnType("boolean");
+
+                    b.Property<decimal>("LoyaltyDiscountAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("LoyaltyRefillsEarned")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("LoyaltyRewardApplied")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LoyaltyRewardRedeemedCount")
+                        .HasColumnType("integer");
 
                     b.Property<int>("PaymentMethod")
                         .HasColumnType("integer");
@@ -762,6 +836,31 @@ namespace MacharPos.Web.Migrations
                         .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.LoyaltyTransaction", b =>
+                {
+                    b.HasOne("MacharPos.Core.Entities.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MacharPos.Core.Entities.Sale", "Sale")
+                        .WithMany()
+                        .HasForeignKey("SaleId");
+
+                    b.HasOne("MacharPos.Core.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Sale");
 
                     b.Navigation("Station");
                 });

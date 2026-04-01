@@ -3,15 +3,16 @@ using MacharPos.Core.Entities;
 using MacharPos.Web.Controllers;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services.HQ;
+using MacharPos.Web.Services.Loyalty;
 using MacharPos.Web.Tests.TestInfrastructure;
 using MacharPos.Web.ViewModels.Sales;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Mvc.ViewFeatures;
 
 namespace MacharPos.Web.Tests.GoLive;
 
@@ -79,7 +80,8 @@ public class MasakaGoLiveTests : IAsyncLifetime
         params string[] roles)
     {
         var stationCtx = new FakeStationContext(stationId);
-        var ctrl = new SalesController(db, stationCtx, users, signIn);
+        var loyalty = new LoyaltyService();
+        var ctrl = new SalesController(db, stationCtx, users, signIn, loyalty);
 
         var http = new DefaultHttpContext
         {
@@ -95,6 +97,34 @@ public class MasakaGoLiveTests : IAsyncLifetime
         ctrl.TempData = new TempDataDictionary(http, new InMemoryTempDataProvider());
 
         return ctrl;
+    }
+
+    private static async Task<Customer> EnsureNamedLoyaltyCustomerAsync(AppDbContext db, Guid stationId, string name = "Loyalty Test Customer")
+    {
+        var existing = await db.Customers.FirstOrDefaultAsync(c =>
+            c.StationId == stationId &&
+            c.Name == name);
+
+        if (existing is not null)
+            return existing;
+
+        var customer = new Customer
+        {
+            Id = Guid.NewGuid(),
+            StationId = stationId,
+            Name = name,
+            Phone = "08000000000",
+            IsActive = true,
+            IsLoyaltyEnabled = true,
+            LoyaltyStampCount = 0,
+            LoyaltyAvailableRewards = 0,
+            LoyaltyLifetimeEarned = 0,
+            LoyaltyLifetimeRedeemed = 0
+        };
+
+        db.Customers.Add(customer);
+        await db.SaveChangesAsync();
+        return customer;
     }
 
     [Fact(DisplayName = "2.1 Normal LPG sale completes and deducts batch Kg")]
@@ -275,6 +305,223 @@ public class MasakaGoLiveTests : IAsyncLifetime
 
         var adminRes = await client.SendAsync(adminReq);
         adminRes.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+    }
+
+    [Fact(DisplayName = "4.2 Named customer earns 1 loyalty stamp on qualifying LPG refill")]
+    public async Task Named_Customer_Earns_Loyalty_Stamp_On_Qualifying_Sale()
+    {
+        var services = _factory!.Services;
+
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<MacharPos.Web.Auth.ApplicationUser>>();
+        var signIn = scope.ServiceProvider.GetRequiredService<SignInManager<MacharPos.Web.Auth.ApplicationUser>>();
+
+        var (station, lpg12_5, _, cashier) = await SeedHelper.SeedMasakaAsync(services);
+        var customer = await EnsureNamedLoyaltyCustomerAsync(db, station.Id);
+
+        var before = await db.Customers.AsNoTracking().FirstAsync(c => c.Id == customer.Id);
+
+        var vm = new SaleCreateVm
+        {
+            CustomerId = customer.Id,
+            PaymentMethod = PaymentMethod.Cash,
+            ApplyLoyaltyReward = false,
+            Lines = new List<SaleLineVm>
+        {
+            new() { ProductId = lpg12_5.Id, Qty = 1m, UnitPrice = lpg12_5.DefaultUnitPrice }
+        }
+        };
+
+        var ctrl = BuildSalesController(db, station.Id, users, signIn, cashier.Id, "Cashier");
+
+        var result = await ctrl.New(vm);
+
+        result.Should().BeOfType<RedirectToActionResult>();
+
+        var after = await db.Customers.AsNoTracking().FirstAsync(c => c.Id == customer.Id);
+
+        after.LoyaltyStampCount.Should().Be(before.LoyaltyStampCount + 1);
+        after.LoyaltyAvailableRewards.Should().Be(before.LoyaltyAvailableRewards);
+    }
+
+    [Fact(DisplayName = "4.3 6th qualifying refill converts to 1 available loyalty reward")]
+    public async Task Sixth_Refill_Converts_To_Available_Loyalty_Reward()
+    {
+        var services = _factory!.Services;
+
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<MacharPos.Web.Auth.ApplicationUser>>();
+        var signIn = scope.ServiceProvider.GetRequiredService<SignInManager<MacharPos.Web.Auth.ApplicationUser>>();
+
+        var (station, lpg12_5, _, cashier) = await SeedHelper.SeedMasakaAsync(services);
+        var customer = await EnsureNamedLoyaltyCustomerAsync(db, station.Id);
+
+        customer.LoyaltyStampCount = 5;
+        customer.LoyaltyAvailableRewards = 0;
+        customer.LoyaltyLifetimeEarned = 0;
+        await db.SaveChangesAsync();
+
+        var vm = new SaleCreateVm
+        {
+            CustomerId = customer.Id,
+            PaymentMethod = PaymentMethod.Cash,
+            ApplyLoyaltyReward = false,
+            Lines = new List<SaleLineVm>
+        {
+            new() { ProductId = lpg12_5.Id, Qty = 1m, UnitPrice = lpg12_5.DefaultUnitPrice }
+        }
+        };
+
+        var ctrl = BuildSalesController(db, station.Id, users, signIn, cashier.Id, "Cashier");
+
+        var result = await ctrl.New(vm);
+
+        result.Should().BeOfType<RedirectToActionResult>();
+
+        var after = await db.Customers.AsNoTracking().FirstAsync(c => c.Id == customer.Id);
+
+        after.LoyaltyStampCount.Should().Be(0);
+        after.LoyaltyAvailableRewards.Should().Be(1);
+        after.LoyaltyLifetimeEarned.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "4.4 Available loyalty reward applies 25 percent discount on next refill")]
+    public async Task Loyalty_Reward_Applies_25Percent_Discount()
+    {
+        var services = _factory!.Services;
+
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<MacharPos.Web.Auth.ApplicationUser>>();
+        var signIn = scope.ServiceProvider.GetRequiredService<SignInManager<MacharPos.Web.Auth.ApplicationUser>>();
+
+        var (station, lpg12_5, _, cashier) = await SeedHelper.SeedMasakaAsync(services);
+        var customer = await EnsureNamedLoyaltyCustomerAsync(db, station.Id);
+
+        customer.LoyaltyStampCount = 0;
+        customer.LoyaltyAvailableRewards = 1;
+        customer.LoyaltyLifetimeRedeemed = 0;
+        await db.SaveChangesAsync();
+
+        var vm = new SaleCreateVm
+        {
+            CustomerId = customer.Id,
+            PaymentMethod = PaymentMethod.Cash,
+            ApplyLoyaltyReward = true,
+            Lines = new List<SaleLineVm>
+        {
+            new() { ProductId = lpg12_5.Id, Qty = 1m, UnitPrice = lpg12_5.DefaultUnitPrice }
+        }
+        };
+
+        var ctrl = BuildSalesController(db, station.Id, users, signIn, cashier.Id, "Cashier");
+
+        var result = await ctrl.New(vm);
+
+        result.Should().BeOfType<RedirectToActionResult>();
+
+        var sale = await db.Sales
+            .AsNoTracking()
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstAsync(s => s.StationId == station.Id && s.CustomerId == customer.Id);
+
+        var after = await db.Customers.AsNoTracking().FirstAsync(c => c.Id == customer.Id);
+
+        sale.LoyaltyRewardApplied.Should().BeTrue();
+        sale.LoyaltyDiscountAmount.Should().Be(lpg12_5.DefaultUnitPrice * 0.25m);
+
+        after.LoyaltyAvailableRewards.Should().Be(0);
+        after.LoyaltyLifetimeRedeemed.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "4.5 Walk-in customer does not earn loyalty")]
+    public async Task WalkIn_Customer_Does_Not_Earn_Loyalty()
+    {
+        var services = _factory!.Services;
+
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<MacharPos.Web.Auth.ApplicationUser>>();
+        var signIn = scope.ServiceProvider.GetRequiredService<SignInManager<MacharPos.Web.Auth.ApplicationUser>>();
+
+        var (station, lpg12_5, _, cashier) = await SeedHelper.SeedMasakaAsync(services);
+
+        var walkIn = await db.Customers.FirstAsync(c =>
+            c.StationId == station.Id &&
+            c.Name == "Walk-in");
+
+        var before = await db.Customers.AsNoTracking().FirstAsync(c => c.Id == walkIn.Id);
+
+        var vm = new SaleCreateVm
+        {
+            CustomerId = walkIn.Id,
+            PaymentMethod = PaymentMethod.Cash,
+            ApplyLoyaltyReward = false,
+            Lines = new List<SaleLineVm>
+        {
+            new() { ProductId = lpg12_5.Id, Qty = 1m, UnitPrice = lpg12_5.DefaultUnitPrice }
+        }
+        };
+
+        var ctrl = BuildSalesController(db, station.Id, users, signIn, cashier.Id, "Cashier");
+
+        var result = await ctrl.New(vm);
+
+        result.Should().BeOfType<RedirectToActionResult>();
+
+        var after = await db.Customers.AsNoTracking().FirstAsync(c => c.Id == walkIn.Id);
+
+        after.LoyaltyStampCount.Should().Be(before.LoyaltyStampCount);
+        after.LoyaltyAvailableRewards.Should().Be(before.LoyaltyAvailableRewards);
+    }
+
+    [Fact(DisplayName = "4.6 Loyalty reward cannot be redeemed when customer has none")]
+    public async Task Loyalty_Redeem_With_No_Available_Reward_Does_Not_Apply_Discount()
+    {
+        var services = _factory!.Services;
+
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<MacharPos.Web.Auth.ApplicationUser>>();
+        var signIn = scope.ServiceProvider.GetRequiredService<SignInManager<MacharPos.Web.Auth.ApplicationUser>>();
+
+        var (station, lpg12_5, _, cashier) = await SeedHelper.SeedMasakaAsync(services);
+        var customer = await EnsureNamedLoyaltyCustomerAsync(db, station.Id, "No Reward Customer");
+
+        customer.LoyaltyStampCount = 2;
+        customer.LoyaltyAvailableRewards = 0;
+        await db.SaveChangesAsync();
+
+        var vm = new SaleCreateVm
+        {
+            CustomerId = customer.Id,
+            PaymentMethod = PaymentMethod.Cash,
+            ApplyLoyaltyReward = true,
+            Lines = new List<SaleLineVm>
+        {
+            new() { ProductId = lpg12_5.Id, Qty = 1m, UnitPrice = lpg12_5.DefaultUnitPrice }
+        }
+        };
+
+        var ctrl = BuildSalesController(db, station.Id, users, signIn, cashier.Id, "Cashier");
+
+        var result = await ctrl.New(vm);
+
+        result.Should().BeOfType<RedirectToActionResult>();
+
+        var sale = await db.Sales
+            .AsNoTracking()
+            .OrderByDescending(s => s.CreatedAt)
+            .FirstAsync(s => s.StationId == station.Id && s.CustomerId == customer.Id);
+
+        var after = await db.Customers.AsNoTracking().FirstAsync(c => c.Id == customer.Id);
+
+        sale.LoyaltyRewardApplied.Should().BeFalse();
+        sale.LoyaltyDiscountAmount.Should().Be(0m);
+        after.LoyaltyAvailableRewards.Should().Be(0);
+        after.LoyaltyStampCount.Should().Be(3);
     }
 }
 

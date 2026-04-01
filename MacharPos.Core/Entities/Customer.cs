@@ -27,5 +27,12 @@ namespace MacharPos.Core.Entities
         public int CreditDueDays { get; set; } = 0;
 
         public bool IsActive { get; set; } = true;
+
+        // --- Loyalty (Phase 1) ---
+        public bool IsLoyaltyEnabled { get; set; } = true;
+        public int LoyaltyStampCount { get; set; } = 0;
+        public int LoyaltyAvailableRewards { get; set; } = 0;
+        public int LoyaltyLifetimeEarned { get; set; } = 0;
+        public int LoyaltyLifetimeRedeemed { get; set; } = 0;
     }
 }

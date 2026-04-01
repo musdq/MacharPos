@@ -80,11 +80,26 @@
             <div class="fw-semibold">₦@Model.Subtotal.ToString("N2")</div>
         </div>
 
-        @if (Model.DiscountAmount > 0)
+        @if (Model.LoyaltyDiscountAmount > 0)
         {
             <div class="d-flex justify-content-between">
-                <div class="fw-semibold">Discount</div>
-                <div class="fw-semibold">- ₦@Model.DiscountAmount.ToString("N2")</div>
+                <div class="fw-semibold">Loyalty Discount</div>
+                <div class="fw-semibold">- ₦@Model.LoyaltyDiscountAmount.ToString("N2")</div>
+            </div>
+        }
+
+        @if (Model.DiscountAmount > Model.LoyaltyDiscountAmount)
+        {
+            <div class="d-flex justify-content-between">
+                <div class="fw-semibold">Manual Discount</div>
+                <div class="fw-semibold">- ₦@((Model.DiscountAmount - Model.LoyaltyDiscountAmount).ToString("N2"))</div>
+            </div>
+        }
+
+        @if (Model.LoyaltyRewardApplied)
+        {
+            <div class="small text-success mt-2">
+                Loyalty reward applied: 25% off one qualifying refill.
             </div>
         }
 
@@ -170,8 +185,13 @@ qz.security.setSignaturePromise(function(toSign) {
 
     out += hr();
     out += padRight("Subtotal", LINE_WIDTH - money(sale.subtotal).length) + money(sale.subtotal) + "\n";
-    if (sale.discountAmount > 0){
-      const disc = "- " + money(sale.discountAmount);
+    if (sale.loyaltyDiscountAmount > 0){
+      const disc = "- " + money(sale.loyaltyDiscountAmount);
+      out += padRight("Loyalty", LINE_WIDTH - disc.length) + disc + "\n";
+    }
+    const manualDiscount = (sale.discountAmount || 0) - (sale.loyaltyDiscountAmount || 0);
+    if (manualDiscount > 0){
+      const disc = "- " + money(manualDiscount);
       out += padRight("Discount", LINE_WIDTH - disc.length) + disc + "\n";
     }
     out += padRight("TOTAL", LINE_WIDTH - money(sale.total).length) + money(sale.total) + "\n";
@@ -231,6 +251,7 @@ data: receipt + feed5 + cutPartial
       paymentMethod: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PaymentMethod.ToString())),
       subtotal: @Model.Subtotal,
       discountAmount: @Model.DiscountAmount,
+      loyaltyDiscountAmount: @Model.LoyaltyDiscountAmount,
       total: @Model.Total,
      items: [
   @Html.Raw(string.Join(",",

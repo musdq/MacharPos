@@ -57,12 +57,50 @@
                 </div>
             </div>
 
+            <div class="border rounded p-3 mt-3 bg-light-subtle">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="fw-semibold">Loyalty Program</div>
+                        <div class="small text-muted">Buy 6 refills, get 25% off the 7th refill.</div>
+                    </div>
+                    <div class="text-end small">
+                        <div>Stamps: <span class="fw-semibold">@Model.LoyaltyStampCount / 6</span></div>
+                        <div>Rewards: <span class="fw-semibold">@Model.LoyaltyAvailableRewards</span></div>
+                    </div>
+                </div>
+
+                <div class="mt-2 small @(Model.LoyaltyEligibleCustomer ? "text-success" : "text-muted")">
+                    @(Model.LoyaltyMessage ?? "Select a named customer to use loyalty.")
+                </div>
+
+                @if (Model.CustomerId.HasValue && Model.LoyaltyAvailableRewards > 0)
+                {
+                    <div class="form-check">
+                        <input asp-for="ApplyLoyaltyReward" class="form-check-input" />
+                        <label asp-for="ApplyLoyaltyReward" class="form-check-label">
+                            Apply loyalty reward (25% off next refill)
+                        </label>
+                    </div>
+                }
+                else
+                {
+                    <input type="hidden" asp-for="ApplyLoyaltyReward" value="false" />
+                }
+
+                @if (Model.LoyaltyPreviewDiscount > 0)
+                {
+                    <div class="small text-success mt-2">
+                        Loyalty discount preview: ₦@Model.LoyaltyPreviewDiscount.ToString("N2")
+                    </div>
+                }
+            </div>
+
             <hr class="my-3" />
 
             <div class="row g-2">
                 <div class="col-12 col-md-4">
-                    <label class="form-label">Discount (₦)</label>
-                    <input class="form-control" asp-for="DiscountAmount" type="number" step="0.01" value="0" oninput="toggleManagerAuth()" />
+                    <label class="form-label">Manual Discount (₦)</label>
+                    <input class="form-control" asp-for="DiscountAmount" type="number" step="0.01" value="@Model.DiscountAmount" oninput="toggleManagerAuth()" />
                 </div>
 
                 <div class="col-12 col-md-4" id="mgrEmailWrap" style="display:none;">
@@ -241,9 +279,10 @@
           });
 
           calcTotals();
+          toggleManagerAuth();
         }
 
-              function calcTotals() {
+        function calcTotals() {
           const rows = document.querySelectorAll("#linesTable tbody tr");
           let grand = 0;
 
@@ -265,7 +304,6 @@
             let total = 0;
 
             if (mode === "2") {
-              // By Amount
               total = amount || 0;
 
               if (price > 0 && amount > 0) {
@@ -278,10 +316,6 @@
                 qtyInput.value = "1";
               }
             } else {
-              // By Kg mode
-              // Qty = number of cylinders
-              // Kg auto-derived from product EquivalentKg × Qty
-              // Total = Qty × UnitPrice
               if (eqKg > 0 && qty > 0) {
                 kgInput.value = (qty * eqKg).toFixed(2);
               } else {
@@ -308,7 +342,7 @@
           document.getElementById("grandTotal").innerText = grand.toFixed(2);
         }
 
-             function onProductChange(sel) {
+        function onProductChange(sel) {
           const opt = sel.options[sel.selectedIndex];
           const price = parseFloat(opt.getAttribute("data-price") || "0");
           const eqKg = parseFloat(opt.getAttribute("data-eqkg") || "0");
@@ -328,6 +362,7 @@
           }
 
           calcTotals();
+          toggleManagerAuth();
           focusPrimaryInputOnRow(row);
         }
 
@@ -338,7 +373,7 @@
           focusPrimaryInputOnRow(row);
         }
 
-              function setRowModeState(row) {
+        function setRowModeState(row) {
           const mode = row.querySelector('select[name$=".EntryMode"]').value;
           const kgInput = row.querySelector('input[name$=".Kg"]');
           const amountInput = row.querySelector('input[name$=".Amount"]');
@@ -359,134 +394,61 @@
 
           if (isReadonly) {
             priceInput.removeAttribute("readonly");
-            priceInput.classList.add("border-warning");
-            anchor.textContent = "Lock";
-            forceManagerAuthOn();
-            setTimeout(() => priceInput.focus(), 0);
+            anchor.textContent = "Lock Price";
+            priceInput.focus();
           } else {
             priceInput.setAttribute("readonly", "readonly");
-            priceInput.classList.remove("border-warning");
             anchor.textContent = "Override";
           }
 
           toggleManagerAuth();
+          calcTotals();
           return false;
         }
 
         function toggleManagerAuth() {
-          const disc = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
-          const show = disc > 0 || hasAnyPriceOverride();
+          const discount = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
+          let hasOverride = false;
+
+          document.querySelectorAll("#linesTable tbody tr").forEach(r => {
+            const productSelect = r.querySelector('select[name$=".ProductId"]');
+            const selectedOpt = productSelect?.options[productSelect.selectedIndex];
+            const defaultPrice = parseFloat(selectedOpt?.getAttribute("data-price") || "0");
+            const actualPrice = parseFloat(r.querySelector('input[name$=".UnitPrice"]').value || "0");
+
+            if (actualPrice > 0 && defaultPrice > 0 && Math.abs(actualPrice - defaultPrice) > 0.0001) {
+              hasOverride = true;
+            }
+          });
+
+          const show = discount > 0 || hasOverride;
           document.getElementById("mgrEmailWrap").style.display = show ? "" : "none";
           document.getElementById("mgrPassWrap").style.display = show ? "" : "none";
-          setManagerFieldsRequired(show);
-        }
-
-        function forceManagerAuthOn() {
-          document.getElementById("mgrEmailWrap").style.display = "";
-          document.getElementById("mgrPassWrap").style.display = "";
-        }
-
-        function hasAnyPriceOverride() {
-          return Array.from(document.querySelectorAll('#linesTable tbody tr input[name$=".UnitPrice"]'))
-            .some(i => !i.hasAttribute('readonly'));
-        }
-
-        function requiresManagerAuth() {
-          const disc = parseFloat(document.querySelector('[name="DiscountAmount"]').value || "0");
-          return disc > 0 || hasAnyPriceOverride();
-        }
-
-        function setManagerFieldsRequired(isRequired) {
-          const email = document.querySelector('[name="ManagerEmail"]');
-          const pass = document.querySelector('[name="ManagerPassword"]');
-          if (email) email.required = isRequired;
-          if (pass) pass.required = isRequired;
-        }
-
-        function validateManagerAuthBeforeSubmit(e) {
-          if (!requiresManagerAuth()) {
-            setManagerFieldsRequired(false);
-            return true;
-          }
-
-          forceManagerAuthOn();
-          setManagerFieldsRequired(true);
-
-          const emailVal = (document.querySelector('[name="ManagerEmail"]')?.value || "").trim();
-          const passVal  = (document.querySelector('[name="ManagerPassword"]')?.value || "").trim();
-
-          if (!emailVal || !passVal) {
-            e?.preventDefault?.();
-            alert("Manager approval is required (email + password) for discount or price override.");
-            if (!emailVal) document.querySelector('[name="ManagerEmail"]')?.focus();
-            else document.querySelector('[name="ManagerPassword"]')?.focus();
-            return false;
-          }
-
-          return true;
         }
 
         function getProductsOptionsHtml() {
-          const opts = [];
-          @foreach (var p in Model.Products)
-          {
-                        var price = productPrices.TryGetValue(p.Value, out var pv) ? pv : 0m;
-                        var eqKg = productEquivalentKgs.TryGetValue(p.Value, out var ev) ? ev : 0m;
-                        <text>opts.push(`<option value="@p.Value" data-price="@price" data-eqkg="@eqKg">@p.Text</option>`);</text>
-          }
-          return opts.join("");
+          const first = document.querySelector(".product-select");
+          if (!first) return "";
+          return Array.from(first.options)
+            .filter(o => o.value)
+            .map(o => `<option value="${o.value}" data-price="${o.getAttribute("data-price") || 0}" data-eqkg="${o.getAttribute("data-eqkg") || 0}">${o.text}</option>`)
+            .join("");
         }
 
         function enhanceRow(row) {
-          const sel = row.querySelector('select[name$=".ProductId"]');
-          if (sel && window.TomSelect && !sel.tomselect) {
-            new TomSelect(sel, {
+          const select = row.querySelector(".product-select");
+          if (select) {
+            new TomSelect(select, {
               create: false,
               allowEmptyOption: true,
-              placeholder: 'Select...',
-              dropdownParent: 'body'
+              placeholder: "Select product..."
             });
-          }
-
-          const qty = row.querySelector('input[name$=".Qty"]');
-          const amount = row.querySelector('input[name$=".Amount"]');
-
-          if (qty) {
-            qty.addEventListener('keydown', (e) => {
-              if (e.key !== 'Enter') return;
-              e.preventDefault();
-              moveNextFromRow(row);
-            });
-          }
-
-          if (amount) {
-            amount.addEventListener('keydown', (e) => {
-              if (e.key !== 'Enter') return;
-              e.preventDefault();
-              moveNextFromRow(row);
-            });
-          }
-        }
-
-        function moveNextFromRow(row) {
-          const tbody = document.querySelector('#linesTable tbody');
-          const rows = Array.from(tbody.querySelectorAll('tr'));
-          const isLast = rows.length && rows[rows.length - 1] === row;
-
-          if (isLast) {
-            addLine();
-          } else {
-            const next = rows[rows.indexOf(row) + 1];
-            if (next) focusProductOnRow(next);
           }
         }
 
         function focusProductOnRow(row) {
-          const sel = row.querySelector('select[name$=".ProductId"]');
-          if (!sel) return;
-
-          if (sel.tomselect) sel.tomselect.focus();
-          else sel.focus();
+          const ts = row.querySelector(".product-select")?.tomselect;
+          if (ts) ts.focus();
         }
 
         function focusPrimaryInputOnRow(row) {
@@ -495,77 +457,28 @@
             ? row.querySelector('input[name$=".Amount"]')
             : row.querySelector('input[name$=".Qty"]');
 
-          if (!target) return;
-
-          setTimeout(() => {
-            target.focus();
-            target.select?.();
-          }, 0);
+          target?.focus();
+          target?.select?.();
         }
 
-        function enhanceAllRows() {
-          document.querySelectorAll('#linesTable tbody tr').forEach(r => {
-            enhanceRow(r);
-            setRowModeState(r);
-          });
-        }
-
-        let saleSubmitting = false;
-
-        function lockSaleSubmit() {
-          const form = document.getElementById('saleForm');
-          const btn = document.getElementById('completeSaleBtn');
-          if (!form || !btn) return;
-
-          saleSubmitting = true;
-          form.dataset.submitting = "true";
-          btn.disabled = true;
-          btn.classList.add('disabled');
-
-          const text = btn.querySelector('.btn-text');
-          if (text) text.textContent = 'Processing...';
-        }
-
-        function unlockSaleSubmit() {
-          const form = document.getElementById('saleForm');
-          const btn = document.getElementById('completeSaleBtn');
-          if (!form || !btn) return;
-
-          saleSubmitting = false;
-          form.dataset.submitting = "false";
-          btn.disabled = false;
-          btn.classList.remove('disabled');
-
-          const text = btn.querySelector('.btn-text');
-          if (text) text.textContent = 'Complete Sale';
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-          enhanceAllRows();
-          toggleManagerAuth();
-          calcTotals();
-
-          const form = document.getElementById('saleForm');
-          if (form) {
-            form.addEventListener('submit', function (e) {
-              if (saleSubmitting || form.dataset.submitting === "true") {
-                e.preventDefault();
-                return false;
-              }
-
-              const ok = validateManagerAuthBeforeSubmit(e);
-              if (!ok) {
-                unlockSaleSubmit();
-                return false;
-              }
-
-              lockSaleSubmit();
-              return true;
+        document.addEventListener("DOMContentLoaded", function () {
+          document.querySelectorAll(".product-select").forEach(s => {
+            new TomSelect(s, {
+              create: false,
+              allowEmptyOption: true,
+              placeholder: "Select product..."
             });
-          }
+          });
 
-          const firstRow = document.querySelector('#linesTable tbody tr');
-          if (firstRow) focusProductOnRow(firstRow);
+          document.querySelectorAll("#linesTable tbody tr").forEach(r => setRowModeState(r));
+          calcTotals();
+          toggleManagerAuth();
+
+          document.getElementById("saleForm").addEventListener("submit", function () {
+            const btn = document.getElementById("completeSaleBtn");
+            btn.disabled = true;
+            btn.querySelector(".btn-text").innerText = "Processing...";
+          });
         });
     </script>
 }

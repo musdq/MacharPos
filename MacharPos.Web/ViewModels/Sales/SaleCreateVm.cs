@@ -7,6 +7,7 @@ namespace MacharPos.Web.ViewModels.Sales;
 public class SaleCreateVm
 {
     public Guid? CustomerId { get; set; }
+
     [Required]
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.Cash;
 
@@ -23,6 +24,13 @@ public class SaleCreateVm
     public string? ManagerEmail { get; set; }
     public string? ManagerPassword { get; set; }
 
-
-
+    // Loyalty
+    public bool ApplyLoyaltyReward { get; set; } = false;
+    public bool LoyaltyEligibleCustomer { get; set; } = false;
+    public bool LoyaltyCustomerSelected { get; set; } = false;
+    public bool LoyaltyCanRedeemNow { get; set; } = false;
+    public int LoyaltyStampCount { get; set; } = 0;
+    public int LoyaltyAvailableRewards { get; set; } = 0;
+    public decimal LoyaltyPreviewDiscount { get; set; } = 0m;
+    public string? LoyaltyMessage { get; set; }
 }

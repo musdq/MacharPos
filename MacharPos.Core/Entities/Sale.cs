@@ -60,6 +60,12 @@ namespace MacharPos.Core.Entities
         public DateTime? CreditDueDate { get; set; } // map as 'date'
         public string? CreditNotes { get; set; }
 
+        // --- Loyalty (Phase 1) ---
+        public decimal LoyaltyDiscountAmount { get; set; } = 0m;
+        public bool LoyaltyRewardApplied { get; set; } = false;
+        public int LoyaltyRewardRedeemedCount { get; set; } = 0;
+        public int LoyaltyRefillsEarned { get; set; } = 0;
+
 
     }
 

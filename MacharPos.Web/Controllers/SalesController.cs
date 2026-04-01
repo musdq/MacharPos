@@ -6,6 +6,7 @@ using MacharPos.Web.Data;
 using MacharPos.Web.DTO;
 using MacharPos.Web.Services;
 using MacharPos.Web.ViewModels.Sales;
+using MacharPos.Web.Services.Loyalty;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -24,13 +25,20 @@ public class SalesController : Controller
     private readonly IStationContext _stationCtx;
     private readonly UserManager<ApplicationUser> _users;
     private readonly SignInManager<ApplicationUser> _signIn;
+    private readonly ILoyaltyService _loyaltyService;
 
-    public SalesController(AppDbContext db, IStationContext stationCtx, UserManager<ApplicationUser> users, SignInManager<ApplicationUser> signIn)
+    public SalesController(
+        AppDbContext db,
+        IStationContext stationCtx,
+        UserManager<ApplicationUser> users,
+        SignInManager<ApplicationUser> signIn,
+        ILoyaltyService loyaltyService)
     {
         _db = db;
         _stationCtx = stationCtx;
         _users = users;
         _signIn = signIn;
+        _loyaltyService = loyaltyService;
     }
 
     // Normalizes date for DATE column ("date") => Kind must NOT be Utc
@@ -270,6 +278,8 @@ public class SalesController : Controller
                 await _db.SaveChangesAsync();
             }
 
+            await _loyaltyService.ReverseVoidedSaleAsync(_db, sale, "Sale voided.");
+
             sale.Status = SaleStatus.Voided;
             sale.VoidedByUserId = user.Id;
             sale.VoidedAtUtc = DateTime.UtcNow;
@@ -343,6 +353,8 @@ public class SalesController : Controller
             Lines = new List<SaleLineVm> { new SaleLineVm() }
         };
 
+        await PopulateLoyaltyStateAsync(vm, stationId, null, null);
+
         return View(vm);
     }
 
@@ -376,9 +388,23 @@ public class SalesController : Controller
         );
 
         var hasPriceOverride = HasPriceOverride(vm, prodMap);
-        var discount = NormalizeDiscount(vm.DiscountAmount);
+        var manualDiscount = NormalizeDiscount(vm.DiscountAmount);
+        var customer = await LoadEligibleCustomerAsync(stationId, vm.CustomerId);
 
-        if (discount > 0 && discount > CalculateSubtotalPreview(vm, prodMap))
+        if (vm.ApplyLoyaltyReward &&
+     (customer is null ||
+      !customer.IsLoyaltyEnabled ||
+      customer.LoyaltyAvailableRewards <= 0 ||
+      string.Equals(customer.Name, "Walk-in", StringComparison.OrdinalIgnoreCase)))
+        {
+            vm.ApplyLoyaltyReward = false;
+        }
+
+        var loyaltyEval = _loyaltyService.EvaluateSale(vm, prodMap, customer);
+
+        await PopulateLoyaltyStateAsync(vm, stationId, customer, loyaltyEval);
+
+        if (manualDiscount > 0 && manualDiscount > CalculateSubtotalPreview(vm, prodMap))
         {
             ModelState.AddModelError("", "Discount cannot be greater than subtotal.");
             return View(vm);
@@ -386,7 +412,7 @@ public class SalesController : Controller
 
         string? approvedByUserId = null;
 
-        if (discount > 0 || hasPriceOverride)
+        if (manualDiscount > 0 || hasPriceOverride)
         {
             var approval = await TryGetManagerApprovalAsync(vm, stationId);
             if (!approval.Success)
@@ -420,10 +446,20 @@ public class SalesController : Controller
 
             sale.Items.AddRange(build.Items);
             sale.Subtotal = build.Subtotal;
-            sale.DiscountAmount = discount;
-            sale.Total = build.Subtotal - discount;
+            if (loyaltyEval.RewardRequested && !loyaltyEval.RewardApplied)
+            {
+                ModelState.AddModelError("", loyaltyEval.Message);
+                return View(vm);
+            }
+
+            sale.DiscountAmount = manualDiscount + loyaltyEval.LoyaltyDiscountAmount;
+            sale.LoyaltyDiscountAmount = loyaltyEval.LoyaltyDiscountAmount;
+            sale.LoyaltyRewardApplied = loyaltyEval.RewardApplied;
+            sale.LoyaltyRewardRedeemedCount = loyaltyEval.RewardsRedeemed;
+            sale.LoyaltyRefillsEarned = loyaltyEval.QualifyingRefillCount;
+            sale.Total = build.Subtotal - sale.DiscountAmount;
             sale.DiscountApprovedByUserId = approvedByUserId;
-            sale.DiscountApprovedAt = (discount > 0) ? DateTime.UtcNow : null;
+            sale.DiscountApprovedAt = (manualDiscount > 0) ? DateTime.UtcNow : null;
 
             if (activeBatch is not null && build.TotalLpgKg > 0m && activeBatch.RemainingKg < build.TotalLpgKg)
             {
@@ -433,6 +469,11 @@ public class SalesController : Controller
             }
 
             _db.Sales.Add(sale);
+
+            if (customer is not null)
+            {
+                _loyaltyService.ApplySaleLoyalty(_db, sale, customer, loyaltyEval);
+            }
 
             var dto = new SaleSyncDto
             {
@@ -510,6 +551,45 @@ public class SalesController : Controller
             p => p.Id.ToString(),
             p => p.EquivalentKg ?? 0m
         );
+    }
+
+    private async Task<Customer?> LoadEligibleCustomerAsync(Guid stationId, Guid? customerId)
+    {
+        if (!customerId.HasValue) return null;
+
+        return await _db.Customers
+            .FirstOrDefaultAsync(c => c.StationId == stationId && c.Id == customerId.Value && c.IsActive);
+    }
+
+    private async Task PopulateLoyaltyStateAsync(SaleCreateVm vm, Guid stationId, Customer? customer, LoyaltySaleEvaluation? evaluation)
+    {
+        if (customer is null && vm.CustomerId.HasValue)
+        {
+            customer = await LoadEligibleCustomerAsync(stationId, vm.CustomerId);
+        }
+
+        if (customer is null)
+        {
+            vm.LoyaltyCustomerSelected = false;
+            vm.LoyaltyEligibleCustomer = false;
+            vm.LoyaltyCanRedeemNow = false;
+            vm.LoyaltyStampCount = 0;
+            vm.LoyaltyAvailableRewards = 0;
+            vm.LoyaltyPreviewDiscount = 0m;
+            vm.LoyaltyMessage ??= "Select a named customer to use loyalty.";
+            return;
+        }
+
+        vm.LoyaltyCustomerSelected = true;
+        vm.LoyaltyEligibleCustomer = LoyaltyService.IsEligibleCustomer(customer);
+        vm.LoyaltyCanRedeemNow = customer.LoyaltyAvailableRewards > 0;
+        vm.LoyaltyStampCount = customer.LoyaltyStampCount;
+        vm.LoyaltyAvailableRewards = customer.LoyaltyAvailableRewards;
+        vm.LoyaltyPreviewDiscount = evaluation?.LoyaltyDiscountAmount ?? 0m;
+        vm.LoyaltyMessage = evaluation?.Message
+            ?? (vm.LoyaltyEligibleCustomer
+                ? $"This customer has {customer.LoyaltyStampCount}/6 stamps and {customer.LoyaltyAvailableRewards} available reward(s)."
+                : "Walk-in or inactive customers cannot use loyalty.");
     }
     private void NormalizeAndValidateLines(SaleCreateVm vm)
     {

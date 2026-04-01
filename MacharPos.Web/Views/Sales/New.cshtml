@@ -47,7 +47,7 @@
             <div class="row g-2">
                 <div class="col-12 col-md-6">
                     <label class="form-label">Customer</label>
-                    <select class="form-select" asp-for="CustomerId" asp-items="Model.Customers"></select>
+                    <select class="form-select" asp-for="CustomerId" asp-items="Model.Customers" id="CustomerId"></select>
                     <div class="form-text">Default is Walk-in.</div>
                 </div>
 
@@ -64,35 +64,32 @@
                         <div class="small text-muted">Buy 6 refills, get 25% off the 7th refill.</div>
                     </div>
                     <div class="text-end small">
-                        <div>Stamps: <span class="fw-semibold">@Model.LoyaltyStampCount / 6</span></div>
-                        <div>Rewards: <span class="fw-semibold">@Model.LoyaltyAvailableRewards</span></div>
+                        <div>Stamps: <span class="fw-semibold" id="loyaltyStampCount">@Model.LoyaltyStampCount</span> / 6</div>
+                        <div>Rewards: <span class="fw-semibold" id="loyaltyRewardCount">@Model.LoyaltyAvailableRewards</span></div>
                     </div>
                 </div>
 
-                <div class="mt-2 small @(Model.LoyaltyEligibleCustomer ? "text-success" : "text-muted")">
+                <div id="loyaltyMessage"
+                     class="mt-2 small @(Model.LoyaltyEligibleCustomer ? "text-success" : "text-muted")">
                     @(Model.LoyaltyMessage ?? "Select a named customer to use loyalty.")
                 </div>
 
-                @if (Model.CustomerId.HasValue && Model.LoyaltyAvailableRewards > 0)
-                {
+                <div id="loyaltyRewardWrap" class="mt-2 @(Model.CustomerId.HasValue && Model.LoyaltyAvailableRewards > 0 ? "" : "d-none")">
                     <div class="form-check">
-                        <input asp-for="ApplyLoyaltyReward" class="form-check-input" />
+                        <input asp-for="ApplyLoyaltyReward" class="form-check-input" id="ApplyLoyaltyReward" />
                         <label asp-for="ApplyLoyaltyReward" class="form-check-label">
                             Apply loyalty reward (25% off next refill)
                         </label>
                     </div>
-                }
-                else
-                {
-                    <input type="hidden" asp-for="ApplyLoyaltyReward" value="false" />
-                }
+                </div>
 
-                @if (Model.LoyaltyPreviewDiscount > 0)
-                {
-                    <div class="small text-success mt-2">
-                        Loyalty discount preview: ₦@Model.LoyaltyPreviewDiscount.ToString("N2")
-                    </div>
-                }
+                <div id="loyaltyRewardHiddenWrap" class="@((Model.CustomerId.HasValue && Model.LoyaltyAvailableRewards > 0) ? "d-none" : "")">
+                    <input type="hidden" asp-for="ApplyLoyaltyReward" id="ApplyLoyaltyRewardHidden" value="false" />
+                </div>
+
+                <div id="loyaltyPreviewWrap" class="small text-success mt-2 @(Model.LoyaltyPreviewDiscount > 0 ? "" : "d-none")">
+                    Loyalty discount preview: ₦<span id="loyaltyPreviewAmount">@Model.LoyaltyPreviewDiscount.ToString("N2")</span>
+                </div>
             </div>
 
             <hr class="my-3" />
@@ -461,6 +458,96 @@
           target?.select?.();
         }
 
+        async function refreshCustomerLoyalty() {
+          const customerSelect = document.getElementById("CustomerId");
+          if (!customerSelect) return;
+
+          const customerId = customerSelect.value;
+
+          const stampEl = document.getElementById("loyaltyStampCount");
+          const rewardEl = document.getElementById("loyaltyRewardCount");
+          const messageEl = document.getElementById("loyaltyMessage");
+          const rewardWrap = document.getElementById("loyaltyRewardWrap");
+          const previewWrap = document.getElementById("loyaltyPreviewWrap");
+          const previewAmount = document.getElementById("loyaltyPreviewAmount");
+          const applyRewardCheckbox = document.getElementById("ApplyLoyaltyReward");
+
+          if (!customerId) {
+            if (stampEl) stampEl.textContent = "0";
+            if (rewardEl) rewardEl.textContent = "0";
+
+            if (messageEl) {
+              messageEl.textContent = "Select a named customer to use loyalty.";
+              messageEl.classList.remove("text-success");
+              messageEl.classList.add("text-muted");
+            }
+
+            if (rewardWrap) rewardWrap.classList.add("d-none");
+            if (previewWrap) previewWrap.classList.add("d-none");
+            if (applyRewardCheckbox) applyRewardCheckbox.checked = false;
+            return;
+          }
+
+          try {
+            const response = await fetch(`/Sales/GetCustomerLoyalty?customerId=${encodeURIComponent(customerId)}`, {
+              headers: {
+                "X-Requested-With": "XMLHttpRequest"
+              }
+            });
+
+            if (!response.ok) {
+              throw new Error("Failed to load loyalty info.");
+            }
+
+            const data = await response.json();
+
+            if (stampEl) stampEl.textContent = data.loyaltyStampCount ?? 0;
+            if (rewardEl) rewardEl.textContent = data.loyaltyAvailableRewards ?? 0;
+
+            if (messageEl) {
+              messageEl.textContent = data.loyaltyMessage || "Select a named customer to use loyalty.";
+              messageEl.classList.remove("text-success", "text-muted");
+              messageEl.classList.add(data.loyaltyEligibleCustomer ? "text-success" : "text-muted");
+            }
+
+            const canRedeem = !!data.canRedeem;
+
+            if (rewardWrap) {
+              rewardWrap.classList.toggle("d-none", !canRedeem);
+            }
+
+            if (!canRedeem && applyRewardCheckbox) {
+              applyRewardCheckbox.checked = false;
+            }
+
+            if (previewWrap) {
+              const discount = Number(data.loyaltyPreviewDiscount || 0);
+              if (discount > 0) {
+                previewWrap.classList.remove("d-none");
+                if (previewAmount) {
+                  previewAmount.textContent = discount.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  });
+                }
+              } else {
+                previewWrap.classList.add("d-none");
+              }
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        }
+
+        function wireCustomerLoyaltyRefresh() {
+          const customerSelect = document.getElementById("CustomerId");
+          if (!customerSelect) return;
+
+          customerSelect.addEventListener("change", function () {
+            refreshCustomerLoyalty();
+          });
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
           document.querySelectorAll(".product-select").forEach(s => {
             new TomSelect(s, {
@@ -473,6 +560,8 @@
           document.querySelectorAll("#linesTable tbody tr").forEach(r => setRowModeState(r));
           calcTotals();
           toggleManagerAuth();
+          wireCustomerLoyaltyRefresh();
+          refreshCustomerLoyalty();
 
           document.getElementById("saleForm").addEventListener("submit", function () {
             const btn = document.getElementById("completeSaleBtn");

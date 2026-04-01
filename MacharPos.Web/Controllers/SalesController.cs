@@ -1013,4 +1013,36 @@ public class SalesController : Controller
         var fileName = $"Sales_{stationPart}_{utcStart:yyyyMMdd}_{utcEndExclusive.AddDays(-1):yyyyMMdd}.xlsx";
         return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
+
+    [HttpGet]
+    public async Task<IActionResult> GetCustomerLoyalty(Guid customerId)
+    {
+        var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+        var customer = await LoadEligibleCustomerAsync(stationId, customerId);
+
+        if (customer is null)
+        {
+            return Json(new
+            {
+                loyaltyStampCount = 0,
+                loyaltyAvailableRewards = 0,
+                loyaltyEligibleCustomer = false,
+                loyaltyMessage = "Select a named customer to use loyalty.",
+                canRedeem = false,
+                loyaltyPreviewDiscount = 0m
+            });
+        }
+
+        return Json(new
+        {
+            loyaltyStampCount = customer.LoyaltyStampCount,
+            loyaltyAvailableRewards = customer.LoyaltyAvailableRewards,
+            loyaltyEligibleCustomer = customer.IsLoyaltyEnabled,
+            loyaltyMessage = customer.IsLoyaltyEnabled
+        ? "Customer is enrolled in loyalty."
+        : "Select a named customer to use loyalty.",
+            canRedeem = customer.IsLoyaltyEnabled && customer.LoyaltyAvailableRewards > 0,
+            loyaltyPreviewDiscount = 0m
+        });
+    }
 }

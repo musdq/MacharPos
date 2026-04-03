@@ -154,6 +154,10 @@ public class SalesController : Controller
             .Where(s => s.Status == SaleStatus.Completed)
             .SumAsync(s => (decimal?)s.Total) ?? 0m;
 
+        var lpgKgSoldinRange = baseQuery
+                .SelectMany(s => s.Items)
+                .Sum(i => i.LpgKg ?? 0m);
+
         var totalCount = await baseQuery.CountAsync();
 
         var sales = await baseQuery
@@ -190,6 +194,7 @@ public class SalesController : Controller
         ViewBag.TotalPages = totalPages;
         ViewBag.HasPreviousPage = page > 1;
         ViewBag.HasNextPage = page < totalPages;
+        ViewBag.LpgKgSoldInRange = lpgKgSoldinRange;
 
         return View(sales);
     }

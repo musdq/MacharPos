@@ -15,6 +15,7 @@
     var totalPages = (int)(ViewBag.TotalPages ?? 0);
     var hasPreviousPage = (bool)(ViewBag.HasPreviousPage ?? false);
     var hasNextPage = (bool)(ViewBag.HasNextPage ?? false);
+    var LpgKgSoldInRange = (decimal)(ViewBag.LpgKgSoldInRange ?? 0m);
 }
 
 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -71,6 +72,7 @@
         <div class="mt-3 small text-secondary d-flex flex-wrap gap-3">
             <div>Total in range: <span class="fw-semibold">₦@total.ToString("N2")</span></div>
             <div>Records: <span class="fw-semibold">@totalCount</span></div>
+            <div>Total kg in range: <span class="fw-semibold"> @LpgKgSoldInRange.ToString("N2")</span></div>
             <div>Page: <span class="fw-semibold">@currentPage</span> / <span class="fw-semibold">@Math.Max(totalPages, 1)</span></div>
         </div>
     </div>

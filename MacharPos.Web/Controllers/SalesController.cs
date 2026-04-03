@@ -142,6 +142,15 @@ public class SalesController : Controller
                 utcEndExclusive = utcStart.AddDays(1);
         }
 
+        var voidedSales = _db.Sales.AsNoTracking()
+          .Include(s => s.Station)
+          .Include(s => s.Customer)
+          .Where(s => s.Status == SaleStatus.Voided)
+          .Where(s =>
+              (!stationIdEffective.HasValue || s.StationId == stationIdEffective.Value) &&
+              s.CreatedAt >= utcStart &&
+              s.CreatedAt < utcEndExclusive);
+
         var baseQuery = _db.Sales.AsNoTracking()
             .Include(s => s.Station)
             .Include(s => s.Customer)

@@ -145,6 +145,7 @@ public class SalesController : Controller
         var baseQuery = _db.Sales.AsNoTracking()
             .Include(s => s.Station)
             .Include(s => s.Customer)
+            .Where(s => s.Status == SaleStatus.Completed)
             .Where(s =>
                 (!stationIdEffective.HasValue || s.StationId == stationIdEffective.Value) &&
                 s.CreatedAt >= utcStart &&

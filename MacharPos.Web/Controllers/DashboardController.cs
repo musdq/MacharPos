@@ -64,29 +64,34 @@ namespace MacharPos.Web.Controllers
             // KPI: Today's sales
             var todaySales = sales
                 .Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd)
+                .Where(s => s.Status == Core.Entities.SaleStatus.Completed)
                 .Sum(s => s.Total);
 
             // KPI: LPG kg sold today
             var lpgKgSoldToday = sales
                 .Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd)
+                .Where(s => s.Status == Core.Entities.SaleStatus.Completed)
                 .SelectMany(s => s.Items)
                 .Sum(i => i.LpgKg ?? 0m);
 
             // KPI: cylinders sold today
             var cylindersSoldToday = sales
                 .Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd)
+                 .Where(s => s.Status == Core.Entities.SaleStatus.Completed)
                 .SelectMany(s => s.Items)
                 .Where(i => (i.LpgKg ?? 0m) > 0m)
                 .Sum(i => i.Qty);
 
             // KPI: LPG kg sold this month
             var lpgKgSoldThisMonth = sales
+                .Where(s => s.Status == Core.Entities.SaleStatus.Completed)
                 .SelectMany(s => s.Items)
                 .Sum(i => i.LpgKg ?? 0m);
 
             // KPI: cylinders sold this month
             // Assumption: each cylinder transaction = Qty 1, including "by amount"
             var cylindersSoldThisMonth = sales
+                .Where(s => s.Status == Core.Entities.SaleStatus.Completed)
                 .SelectMany(s => s.Items)
                 .Where(i => (i.LpgKg ?? 0m) > 0m)
                 .Sum(i => i.Qty);

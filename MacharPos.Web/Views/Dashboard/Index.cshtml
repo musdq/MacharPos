@@ -26,7 +26,7 @@
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-12 col-lg-3">
+    <div class="col-12 col-sm-4 col-lg-4">
         <div class="card shadow-sm">
             <div class="card-body">
                 <div class="d-flex align-items-center justify-content-between">
@@ -40,135 +40,156 @@
         </div>
     </div>
 
-    <div class="col-12 col-lg-3">
+    <div class="col-12 col-sm-4 col-lg-4">
         <div class="card shadow-sm">
             <div class="card-body">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <div class="text-secondary small">LPG Sold (This Month)</div>
-                        <div class="fs-4 fw-bold">
-                            @Model.LpgKgSoldThisMonth.ToString("N2")
-                            <span class="fs-6 fw-semibold">kg</span>
+                <div class="text-muted small">LPG KG Sold Today</div>
+                <div class="fs-4 fw-bold">@Model.LpgKgSoldToday.ToString("N2") kg</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-4 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-muted small">Cylinders Sold Today</div>
+                <div class="fs-4 fw-bold">@Model.LpgCylindersSoldToday</div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-sm-4 col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-secondary small">LPG Sold (This Month)</div>
+                                <div class="fs-4 fw-bold">
+                                    @Model.LpgKgSoldThisMonth.ToString("N2")
+                                    <span class="fs-6 fw-semibold">kg</span>
+                                </div>
+                            </div>
+                            <div class="fs-2">⛽</div>
                         </div>
                     </div>
-                    <div class="fs-2">⛽</div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="col-12 col-lg-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <div class="text-secondary small">Cylinder Sold (This Month)</div>
-                        <div class="fs-4 fw-bold">
-                            @Model.LpgCylindersSoldThisMonth
-                            <span class="fs-6 fw-semibold">cylinders</span>
+            <div class="col-12 col-sm-4 col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-secondary small">Cylinder Sold (This Month)</div>
+                                <div class="fs-4 fw-bold">
+                                    @Model.LpgCylindersSoldThisMonth
+                                    <span class="fs-6 fw-semibold">cylinders</span>
+                                </div>
+                            </div>
+                            <div class="fs-2">⛽</div>
                         </div>
                     </div>
-                    <div class="fs-2">⛽</div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="col-12 col-lg-3">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <div class="text-secondary small">Expected Left in Storage</div>
-                        <div class="fs-4 fw-bold">
-                            @Model.ActiveBatchRemainingKg.ToString("N2")
-                            <span class="fs-6 fw-semibold">kg</span>
+            <div class="col-12 col-sm-4 col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-secondary small">Expected Left in Storage</div>
+                                <div class="fs-4 fw-bold">
+                                    @Model.ActiveBatchRemainingKg.ToString("N2")
+                                    <span class="fs-6 fw-semibold">kg</span>
+                                </div>
+                            </div>
+                            <div class="fs-2">🏷️</div>
+                        </div>
+                        <div class="text-secondary small mt-2">
+                            If this shows 0, activate a batch for the station.
                         </div>
                     </div>
-                    <div class="fs-2">🏷️</div>
-                </div>
-                <div class="text-secondary small mt-2">
-                    If this shows 0, activate a batch for the station.
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-<div class="row g-3">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="fw-semibold mb-2">Daily Sales (Current Month)</div>
-                <div class="chart-wrap" style="height:320px;">
-                    <canvas id="monthlyChart"></canvas>
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">Daily Sales (Current Month)</div>
+                        <div class="chart-wrap" style="height:320px;">
+                            <canvas id="monthlyChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <div class="fw-semibold mb-2">Daily Sales (Current Week)</div>
-                <div class="chart-wrap" style="height:260px;">
-                    <canvas id="weeklyChart"></canvas>
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="fw-semibold mb-2">Daily Sales (Current Week)</div>
+                        <div class="chart-wrap" style="height:260px;">
+                            <canvas id="weeklyChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
 @section Scripts {
-    <script>
-        // Clock
-        function updateClock() {
-          const now = new Date();
-          const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const date = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: '2-digit' });
-          document.getElementById("clockTime").innerText = time;
-          document.getElementById("clockDate").innerText = date;
-        }
-        updateClock();
-        setInterval(updateClock, 1000);
+            <script>
+                // Clock
+                function updateClock() {
+                  const now = new Date();
+                  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const date = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: '2-digit' });
+                  document.getElementById("clockTime").innerText = time;
+                  document.getElementById("clockDate").innerText = date;
+                }
+                updateClock();
+                setInterval(updateClock, 1000);
 
-        const monthlyLabels = @Html.Raw(monthlyLabelsJson);
-        const monthlySales = @Html.Raw(monthlySalesJson);
+                const monthlyLabels = @Html.Raw(monthlyLabelsJson);
+                const monthlySales = @Html.Raw(monthlySalesJson);
 
-        const weeklyLabels = @Html.Raw(weeklyLabelsJson);
-        const weeklySales = @Html.Raw(weeklySalesJson);
+                const weeklyLabels = @Html.Raw(weeklyLabelsJson);
+                const weeklySales = @Html.Raw(weeklySalesJson);
 
-        function buildBarChart(canvasId, labels, data, title) {
-          const ctx = document.getElementById(canvasId);
+                function buildBarChart(canvasId, labels, data, title) {
+                  const ctx = document.getElementById(canvasId);
 
-          // Destroy existing chart if page uses partial refresh / hot reload
-          if (ctx._chartInstance) {
-            ctx._chartInstance.destroy();
-          }
+                  // Destroy existing chart if page uses partial refresh / hot reload
+                  if (ctx._chartInstance) {
+                    ctx._chartInstance.destroy();
+                  }
 
-          const chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: labels,
-              datasets: [{
-                label: title,
-                data: data
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              animation: false,
-              scales: {
-                y: { beginAtZero: true }
-              }
-            }
-          });
+                  const chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                      labels: labels,
+                      datasets: [{
+                        label: title,
+                        data: data
+                      }]
+                    },
+                    options: {
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      animation: false,
+                      scales: {
+                        y: { beginAtZero: true }
+                      }
+                    }
+                  });
 
-          ctx._chartInstance = chart;
-        }
+                  ctx._chartInstance = chart;
+                }
 
-        buildBarChart("monthlyChart", monthlyLabels, monthlySales, "Sales");
-        buildBarChart("weeklyChart", weeklyLabels, weeklySales, "Sales");
-    </script>
+                buildBarChart("monthlyChart", monthlyLabels, monthlySales, "Sales");
+                buildBarChart("weeklyChart", weeklyLabels, weeklySales, "Sales");
+            </script>
 }

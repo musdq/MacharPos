@@ -66,6 +66,19 @@ namespace MacharPos.Web.Controllers
                 .Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd)
                 .Sum(s => s.Total);
 
+            // KPI: LPG kg sold today
+            var lpgKgSoldToday = sales
+                .Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd)
+                .SelectMany(s => s.Items)
+                .Sum(i => i.LpgKg ?? 0m);
+
+            // KPI: cylinders sold today
+            var cylindersSoldToday = sales
+                .Where(s => s.CreatedAt >= todayStart && s.CreatedAt < todayEnd)
+                .SelectMany(s => s.Items)
+                .Where(i => (i.LpgKg ?? 0m) > 0m)
+                .Sum(i => i.Qty);
+
             // KPI: LPG kg sold this month
             var lpgKgSoldThisMonth = sales
                 .SelectMany(s => s.Items)
@@ -74,9 +87,9 @@ namespace MacharPos.Web.Controllers
             // KPI: cylinders sold this month
             // Assumption: each cylinder transaction = Qty 1, including "by amount"
             var cylindersSoldThisMonth = sales
-                          .SelectMany(s => s.Items)
-                          .Where(i => (i.LpgKg ?? 0m) > 0m)
-                          .Sum(i => i.Qty);
+                .SelectMany(s => s.Items)
+                .Where(i => (i.LpgKg ?? 0m) > 0m)
+                .Sum(i => i.Qty);
 
             // KPI: active batch remaining kg
             var activeBatch = await _db.LpgBatches.AsNoTracking()
@@ -128,6 +141,8 @@ namespace MacharPos.Web.Controllers
             {
                 StationName = station.Name,
                 TodaySales = todaySales,
+                LpgKgSoldToday = lpgKgSoldToday,
+                LpgCylindersSoldToday = (int)cylindersSoldToday,
                 LpgKgSoldThisMonth = lpgKgSoldThisMonth,
                 ActiveBatchRemainingKg = remainingKg,
                 LpgCylindersSoldThisMonth = (int)cylindersSoldThisMonth,

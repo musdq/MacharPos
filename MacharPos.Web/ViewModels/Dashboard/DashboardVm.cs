@@ -22,5 +22,8 @@
 
         public decimal TodaySales { get; set; }
 
+        public decimal LpgKgSoldToday { get; set; }
+        public int LpgCylindersSoldToday { get; set; }
+
     }
 }

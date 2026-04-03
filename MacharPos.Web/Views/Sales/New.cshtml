@@ -278,6 +278,10 @@
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     <script>
+        const BY_AMOUNT_ALLOWED_PRODUCTS = [
+          "LPG Refill – 1kg",
+          "Dealer lpg refill 1kg"
+        ];
         function addLine() {
           const tbody = document.querySelector("#linesTable tbody");
           const idx = tbody.querySelectorAll("tr").length;
@@ -432,15 +436,22 @@
           const mode = row.querySelector('select[name$=".EntryMode"]').value;
           const kgInput = row.querySelector('input[name$=".Kg"]');
           const amountInput = row.querySelector('input[name$=".Amount"]');
+          const qtyInput = row.querySelector('input[name$=".Qty"]');
 
           if (mode === "2") {
             kgInput.setAttribute("readonly", "readonly");
             amountInput.removeAttribute("readonly");
+
+            // By Amount should always be one LPG base product line
+            if (qtyInput) qtyInput.value = "1";
           } else {
             kgInput.setAttribute("readonly", "readonly");
             amountInput.setAttribute("readonly", "readonly");
           }
+
+          filterProductsForMode(row);
         }
+
 
         function togglePriceOverride(anchor) {
           const row = anchor.closest("tr");
@@ -481,13 +492,28 @@
           document.getElementById("mgrPassWrap").style.display = show ? "" : "none";
         }
 
-        function getProductsOptionsHtml() {
+        let ALL_PRODUCT_OPTIONS = [];
+
+        function captureAllProductOptions() {
           const first = document.querySelector(".product-select");
-          if (!first) return "";
-          return Array.from(first.options)
+          if (!first) return;
+
+          ALL_PRODUCT_OPTIONS = Array.from(first.options)
             .filter(o => o.value)
-            .map(o => `<option value="${o.value}" data-price="${o.getAttribute("data-price") || 0}" data-eqkg="${o.getAttribute("data-eqkg") || 0}">${o.text}</option>`)
-            .join("");
+            .map(o => ({
+              value: o.value,
+              text: o.text,
+              price: o.getAttribute("data-price") || "0",
+              eqkg: o.getAttribute("data-eqkg") || "0"
+            }));
+        }
+
+        function getProductsOptionsHtml() {
+          return ALL_PRODUCT_OPTIONS.map(o =>
+            `<option value="${o.value}" data-price="${o.price}" data-eqkg="${o.eqkg}">
+              ${o.text}
+            </option>`
+          ).join("");
         }
 
         function enhanceRow(row) {
@@ -623,6 +649,74 @@
               refreshCustomerLoyalty();
             }
           });
+        }
+
+        function filterProductsForMode(row) {
+          const mode = row.querySelector('select[name$=".EntryMode"]').value;
+          const selectEl = row.querySelector('.product-select');
+          if (!selectEl) return;
+
+          const currentValue = selectEl.value || "";
+          const currentText =
+            selectEl.options[selectEl.selectedIndex]?.text?.trim() || "";
+
+          // Use the first product-select as the master source of all options
+          const masterSelect = document.querySelector(".product-select");
+          if (!masterSelect) return;
+
+          const allOptions = Array.from(masterSelect.options)
+            .filter(o => o.value)
+            .map(o => ({
+              value: o.value,
+              text: o.text,
+              price: o.getAttribute("data-price") || "0",
+              eqkg: o.getAttribute("data-eqkg") || "0"
+            }));
+
+          let filteredOptions = allOptions;
+
+          if (mode === "2") {
+            filteredOptions = allOptions.filter(o =>
+              BY_AMOUNT_ALLOWED_PRODUCTS.includes(o.text.trim())
+            );
+          }
+
+          // If TomSelect is active, destroy before rebuilding
+          if (selectEl.tomselect) {
+            selectEl.tomselect.destroy();
+          }
+
+          const placeholder = `<option value="">Select...</option>`;
+          const optionsHtml = filteredOptions.map(o =>
+            `<option value="${o.value}" data-price="${o.price}" data-eqkg="${o.eqkg}">
+              ${o.text}
+            </option>`
+          ).join("");
+
+          selectEl.innerHTML = placeholder + optionsHtml;
+
+          // Try to preserve current selection if still valid
+          const stillExists = filteredOptions.some(o => o.value === currentValue);
+          if (stillExists) {
+            selectEl.value = currentValue;
+          } else {
+            // If switching to By Amount and current product is invalid, auto-pick LPG 1kg
+            const preferred = filteredOptions.find(o => o.text.trim() === "LPG Refill – 1kg")
+              || filteredOptions[0];
+
+            if (preferred) {
+              selectEl.value = preferred.value;
+            }
+          }
+
+          // Re-enhance TomSelect
+          new TomSelect(selectEl, {
+            create: false,
+            allowEmptyOption: true,
+            placeholder: "Select product..."
+          });
+
+          onProductChange(selectEl);
         }
 
         document.addEventListener("DOMContentLoaded", function () {

@@ -226,7 +226,7 @@
             {
                 @if (User.IsInRole("StationManager") || User.IsInRole("Admin"))
                 {
-                    <form asp-action="CloseDay" method="post" class="row g-2">
+                    <form asp-action="CloseDay" method="post" class="row g-2" id="closeDayForm">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="closeDate" value="@Model.CloseDate.ToString("yyyy-MM-dd")" />
 
@@ -267,7 +267,7 @@
                         </div>
 
                         <div class="col-12">
-                            <button class="btn btn-dark w-100">Close Day</button>
+                            <button type="submit" class="btn btn-dark w-100">Close Day</button>
                             <div class="form-text">Locks the day. Only SuperAdmin can change it later.</div>
                         </div>
                     </form>
@@ -389,3 +389,40 @@
         }
     }
 </style>
+@section Scripts {
+<script>
+    (function () {
+        const form = document.getElementById("closeDayForm");
+        if (!form) return;
+
+        form.addEventListener("submit", function (e) {
+            const closeDateInput = form.querySelector('input[name="closeDate"]');
+            if (!closeDateInput || !closeDateInput.value) return;
+
+            const parts = closeDateInput.value.split("-");
+            if (parts.length !== 3) return;
+
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const day = parseInt(parts[2], 10);
+
+            const date = new Date(year, month, day);
+
+            const formattedDate = date.toLocaleDateString("en-GB", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric"
+            });
+
+            const ok = window.confirm(
+                `Are you sure you want to close sales for ${formattedDate}?\n\nThis will lock the day.`
+            );
+
+            if (!ok) {
+                e.preventDefault();
+            }
+        });
+    })();
+</script>
+}

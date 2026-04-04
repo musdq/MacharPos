@@ -1,0 +1,25 @@
+@model MacharPos.Web.ViewModels.Stations.StationVm
+
+<h2>Edit Station</h2>
+
+<form method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+
+    <div class="mb-3">
+        <label class="form-label">Name</label>
+        <input class="form-control" asp-for="Name" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Location</label>
+        <input class="form-control" asp-for="Location" />
+    </div>
+
+    <div class="form-check mb-3">
+        <input class="form-check-input" asp-for="IsActive" />
+        <label class="form-check-label">Active</label>
+    </div>
+
+    <button class="btn btn-dark">Save Changes</button>
+</form>

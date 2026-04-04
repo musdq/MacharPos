@@ -11,5 +11,7 @@ namespace MacharPos.Core.Entities
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Name { get; set; } = "";
         public bool IsActive { get; set; } = true;
+        public string Location { get; set; } = "";
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

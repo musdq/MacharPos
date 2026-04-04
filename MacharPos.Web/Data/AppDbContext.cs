@@ -31,8 +31,6 @@ namespace MacharPos.Web.Data
 
         public DbSet<SyncQueueItem> SyncQueue => Set<SyncQueueItem>();
 
-
-
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);

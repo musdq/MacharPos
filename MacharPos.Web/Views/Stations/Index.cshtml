@@ -1,0 +1,39 @@
+@model IEnumerable<MacharPos.Core.Entities.Station>
+
+@{
+    ViewData["Title"] = "Stations";
+}
+
+<h2 class="mb-3">Stations</h2>
+
+<a class="btn btn-dark mb-3" asp-action="Create">Add Station</a>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var s in Model)
+        {
+            <tr>
+                <td>@s.Name</td>
+                <td>@s.Location</td>
+                <td>@(s.IsActive ? "Active" : "Inactive")</td>
+                <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@s.Id">Edit</a>
+
+                    <form asp-action="Delete" method="post" style="display:inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@s.Id" />
+                        <button class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

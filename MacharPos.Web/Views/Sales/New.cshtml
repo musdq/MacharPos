@@ -106,7 +106,7 @@
             <div class="row g-2">
                 <div class="col-12 col-md-4">
                     <label class="form-label">Manual Discount (₦)</label>
-                    <input class="form-control" asp-for="DiscountAmount" type="number" step="0.01" value="@Model.DiscountAmount" oninput="toggleManagerAuth()" />
+                    <input class="form-control" asp-for="DiscountAmount" type="number" step="0.01" value="@Model.DiscountAmount" oninput="toggleManagerAuth();calcTotals();" />
                 </div>
 
                 <div class="col-12 col-md-4" id="mgrEmailWrap" style="display:none;">
@@ -359,10 +359,13 @@
             const kgInput = r.querySelector('input[name$=".Kg"]');
             const amountInput = r.querySelector('input[name$=".Amount"]');
             const priceInput = r.querySelector('input[name$=".UnitPrice"]');
+          
+            
 
             const qty = parseFloat(qtyInput.value || "0");
             const amount = parseFloat(amountInput.value || "0");
             const price = parseFloat(priceInput.value || "0");
+          
 
             let total = 0;
 
@@ -402,7 +405,13 @@
             grand += total;
           });
 
-          document.getElementById("grandTotal").innerText = grand.toFixed(2);
+               // ✅ APPLY MANUAL DISCOUNT
+        const discount =
+          parseFloat(document.querySelector('[name="DiscountAmount"]')?.value || "0");
+
+        const grandTotal = Math.max(0, grand - discount);
+
+          document.getElementById("grandTotal").innerText = grandTotal.toFixed(2);
         }
 
         function onProductChange(sel) {
@@ -727,7 +736,9 @@
             new TomSelect(s, {
               create: false,
               allowEmptyOption: true,
-              placeholder: "Select product..."
+              placeholder: "Select product...",
+                 dropdownDirection: "up",
+        dropdownParent: "body"
             });
           });
 

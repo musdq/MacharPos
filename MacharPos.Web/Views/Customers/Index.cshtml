@@ -67,6 +67,7 @@
             <table class="table table-sm align-middle">
                 <thead>
                     <tr>
+                        <th>No</th>
                         <th>Name</th>
                         <th>Phone</th>
                         <th>Address</th>
@@ -82,9 +83,11 @@
                 <tbody>
                     @if (Model.Any())
                     {
+                        var index = 1;
                         @foreach (var c in Model)
                         {
                             <tr>
+                                <td>@index</td>
                                 <td class="fw-semibold">@c.Name</td>
                                 <td>@(c.Phone ?? "-")</td>
                                 <td class="text-break">@(c.Address ?? "-")</td>

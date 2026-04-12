@@ -5,6 +5,13 @@
     var stationName = (string)ViewBag.StationName;
     bool showInactive = (bool)ViewBag.ShowInactive;
     var search = (string)(ViewBag.Search ?? "");
+    var stationId = ViewBag.StationId as string;
+    var currentPage = (int)(ViewBag.Page ?? 1);
+    var pageSize = (int)(ViewBag.PageSize ?? 20);
+    var totalCount = (int)(ViewBag.TotalCount ?? 0);
+    var totalPages = (int)(ViewBag.TotalPages ?? 0);
+    var hasPreviousPage = (bool)(ViewBag.HasPreviousPage ?? false);
+    var hasNextPage = (bool)(ViewBag.HasNextPage ?? false);
 }
 
 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -181,5 +188,76 @@
                 </tbody>
             </table>
         </div>
+      @*   @if (totalPages > 1)
+        {
+            <nav class="mt-3">
+                <ul class="pagination pagination-sm justify-content-end mb-0">
+                    <li class="page-item @(hasPreviousPage ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-stationId="@stationId"
+                           asp-route-page="@(currentPage - 1)"
+                           asp-route-pageSize="@pageSize">Previous</a>
+                    </li>
+
+                    @{
+                        var startPage = Math.Max(1, currentPage - 2);
+                        var endPage = Math.Min(totalPages, currentPage + 2);
+                    }
+
+                    @if (startPage > 1)
+                    {
+                        <li class="page-item">
+                            <a class="page-link"
+                               asp-action="Index"
+                               asp-route-stationId="@stationId"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">1</a>
+                        </li>
+
+                        @if (startPage > 2)
+                        {
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        }
+                    }
+
+                    @for (int p = startPage; p <= endPage; p++)
+                    {
+                        <li class="page-item @(p == currentPage ? "active" : "")">
+                            <a class="page-link"
+                               asp-action="Index"
+                               asp-route-stationId="@stationId"
+                               asp-route-page="@p"
+                               asp-route-pageSize="@pageSize">@p</a>
+                        </li>
+                    }
+
+                    @if (endPage < totalPages)
+                    {
+                        @if (endPage < totalPages - 1)
+                        {
+                            <li class="page-item disabled"><span class="page-link">…</span></li>
+                        }
+
+                        <li class="page-item">
+                            <a class="page-link"
+                               asp-action="Index"
+                               asp-route-stationId="@stationId"
+                               asp-route-page="@totalPages"
+                               asp-route-pageSize="@pageSize">@totalPages</a>
+                        </li>
+                    }
+
+                    <li class="page-item @(hasNextPage ? "" : "disabled")">
+                        <a class="page-link"
+                           asp-action="Index"
+                           asp-route-stationId="@stationId"
+                           asp-route-page="@(currentPage + 1)"
+                           asp-route-pageSize="@pageSize">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        }
+ *@
     </div>
 </div>

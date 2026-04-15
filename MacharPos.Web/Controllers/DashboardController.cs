@@ -116,6 +116,7 @@ namespace MacharPos.Web.Controllers
                 var dEnd = d.AddDays(1);
                 return sales
                     .Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd)
+                    .Where(s => s.Status == Core.Entities.SaleStatus.Completed)
                     .Sum(s => s.Total);
             }).ToList();
 
@@ -139,6 +140,7 @@ namespace MacharPos.Web.Controllers
                 var dEnd = d.AddDays(1);
                 return weekSalesData
                     .Where(s => s.CreatedAt >= d && s.CreatedAt < dEnd)
+                    .Where(s => s.Status == Core.Entities.SaleStatus.Completed)
                     .Sum(s => s.Total);
             }).ToList();
 

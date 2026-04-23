@@ -8,6 +8,7 @@
     var endDate = (string)ViewBag.EndDate;
     var total = (decimal)ViewBag.Total;
     var stationId = ViewBag.StationId as string;
+    var stations = ViewBag.Stations as List<SelectListItem> ?? new List<SelectListItem>();
 
     var currentPage = (int)(ViewBag.Page ?? 1);
     var pageSize = (int)(ViewBag.PageSize ?? 20);
@@ -39,16 +40,31 @@
         <form class="row g-2 align-items-end" method="get">
             <input type="hidden" name="page" value="1" />
 
-            @if (!string.IsNullOrWhiteSpace(stationId))
-            {
-                <input type="hidden" name="stationId" value="@stationId" />
-            }
+                <div class="col-12 col-md-3">
+                    <label class="form-label">Station</label>
+                    <select class="form-select" name="stationId">
+                        <option value="">All Stations</option>
+                        @foreach (var st in (ViewBag.Stations as List<SelectListItem> ?? new List<SelectListItem>()))
+                        {
+                            if (st.Value == stationId)
+                            {
+                                <option value="@st.Value" selected>@st.Text</option>
+                            }
+                            else
+                            {
+                                <option value="@st.Value">@st.Text</option>
+                            }
+                        }
+                    </select>
+                </div>
+          
 
             <div class="col-12 col-md-3">
                 <label class="form-label">Quick</label>
                 <select class="form-select" name="quick">
                     <option value="">Custom</option>
                     <option value="today" selected="@(quick == "today")">Today</option>
+                    <option value="yesterday" selected="@(quick == "yesterday")">Yesterday</option>
                     <option value="week" selected="@(quick == "week")">Last 7 days</option>
                     <option value="month" selected="@(quick == "month")">This month</option>
                 </select>

@@ -348,6 +348,7 @@
         function calcTotals() {
           const rows = document.querySelectorAll("#linesTable tbody tr");
           let grand = 0;
+          let loyaltyEligibleTotal = 0;
 
           rows.forEach(r => {
             const mode = r.querySelector('select[name$=".EntryMode"]').value;
@@ -403,13 +404,35 @@
 
             r.querySelector(".lineTotal").innerText = total.toFixed(2);
             grand += total;
+
+                  // Loyalty applies only to refill items, not dealer lines
+                          if (selectedOpt && !selectedOpt.text.toLowerCase().includes("dealer")) {
+          loyaltyEligibleTotal += total;
+        }
           });
 
                // ✅ APPLY MANUAL DISCOUNT
-        const discount =
+        const manualDiscount =
           parseFloat(document.querySelector('[name="DiscountAmount"]')?.value || "0");
 
-        const grandTotal = Math.max(0, grand - discount);
+                 // Loyalty discount (only if checkbox is ticked)
+         const loyaltyCheckbox = document.getElementById("ApplyLoyaltyReward");
+        let loyaltyDiscount = 0;
+
+        if (loyaltyCheckbox?.checked) {
+          loyaltyDiscount = loyaltyEligibleTotal * 0.25;
+        }
+
+        // optional: update preview text from live basket
+        const previewAmount = document.getElementById("loyaltyPreviewAmount");
+        if (previewAmount) {
+          previewAmount.textContent = loyaltyDiscount.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+        }
+
+        const grandTotal = Math.max(0, grand - manualDiscount - loyaltyDiscount);
 
           document.getElementById("grandTotal").innerText = grandTotal.toFixed(2);
         }
@@ -553,7 +576,7 @@
           target?.select?.();
         }
 
-        async function refreshCustomerLoyalty() {
+         async function refreshCustomerLoyalty() {
           const customerSelect = document.getElementById("CustomerId");
           if (!customerSelect) return;
 
@@ -579,20 +602,19 @@
 
             if (rewardWrap) rewardWrap.classList.add("d-none");
             if (previewWrap) previewWrap.classList.add("d-none");
+            if (previewAmount) previewAmount.textContent = "0.00";
             if (applyRewardCheckbox) applyRewardCheckbox.checked = false;
+
+            calcTotals();
             return;
           }
 
           try {
             const response = await fetch(`/Sales/GetCustomerLoyalty?customerId=${encodeURIComponent(customerId)}`, {
-              headers: {
-                "X-Requested-With": "XMLHttpRequest"
-              }
+              headers: { "X-Requested-With": "XMLHttpRequest" }
             });
 
-            if (!response.ok) {
-              throw new Error("Failed to load loyalty info.");
-            }
+            if (!response.ok) throw new Error("Failed to load loyalty info.");
 
             const data = await response.json();
 
@@ -607,30 +629,29 @@
 
             const canRedeem = !!data.canRedeem;
 
-            if (rewardWrap) {
-              rewardWrap.classList.toggle("d-none", !canRedeem);
-            }
+            if (rewardWrap) rewardWrap.classList.toggle("d-none", !canRedeem);
 
             if (!canRedeem && applyRewardCheckbox) {
               applyRewardCheckbox.checked = false;
             }
 
+            const discount = Number(data.loyaltyPreviewDiscount || 0);
+
             if (previewWrap) {
-              const discount = Number(data.loyaltyPreviewDiscount || 0);
-              if (discount > 0) {
-                previewWrap.classList.remove("d-none");
-                if (previewAmount) {
-                  previewAmount.textContent = discount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  });
-                }
-              } else {
-                previewWrap.classList.add("d-none");
-              }
+              previewWrap.classList.toggle("d-none", discount <= 0);
             }
+
+            if (previewAmount) {
+              previewAmount.textContent = discount.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
+            }
+
+            calcTotals();
           } catch (err) {
             console.error(err);
+            calcTotals();
           }
         }
 
@@ -716,6 +737,10 @@
         document.addEventListener("DOMContentLoaded", function () {
             initCustomerSelect();
             captureAllProductOptions();
+
+           document.getElementById("ApplyLoyaltyReward")?.addEventListener("change", calcTotals);
+
+
          const quickCustomerForm = document.getElementById("quickCustomerForm");
         if (quickCustomerForm) {
           quickCustomerForm.addEventListener("submit", submitQuickCustomerForm);
@@ -747,6 +772,8 @@
           toggleManagerAuth();
           wireCustomerLoyaltyRefresh();
           refreshCustomerLoyalty();
+
+       
 
           document.getElementById("saleForm").addEventListener("submit", function () {
             const btn = document.getElementById("completeSaleBtn");

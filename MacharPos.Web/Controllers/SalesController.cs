@@ -73,24 +73,28 @@ public class SalesController : Controller
 
     [HttpGet]
     public async Task<IActionResult> Index(
-        string? quick = null,
-        DateTime? startDate = null,
-        DateTime? endDate = null,
-        Guid? stationId = null,
-        int page = 1,
-        int pageSize = 20)
+      string? quick = null,
+      DateTime? startDate = null,
+      DateTime? endDate = null,
+      Guid? stationId = null,
+      int page = 1,
+      int pageSize = 20)
     {
         if (page < 1) page = 1;
         if (pageSize <= 0) pageSize = 20;
         if (pageSize > 200) pageSize = 200;
 
+        var isAdminOverride = IsAdminOverride();
+
         Guid? stationIdEffective = null;
-        if (IsAdminOverride())
+        if (isAdminOverride)
         {
+            // Admin can view all stations or a selected station
             stationIdEffective = stationId;
         }
         else
         {
+            // Non-admin is locked to assigned station
             stationIdEffective = await _stationCtx.GetStationIdOrThrowAsync();
         }
 
@@ -98,7 +102,7 @@ public class SalesController : Controller
         if (stationIdEffective.HasValue)
         {
             station = await _db.Stations.AsNoTracking()
-                .FirstAsync(s => s.Id == stationIdEffective.Value);
+                .FirstOrDefaultAsync(s => s.Id == stationIdEffective.Value);
         }
 
         // Determine range (UTC)
@@ -106,13 +110,20 @@ public class SalesController : Controller
         DateTime utcEndExclusive;
 
         var now = DateTime.UtcNow;
+
         if (!string.IsNullOrWhiteSpace(quick))
         {
             quick = quick.ToLowerInvariant();
+
             if (quick == "today")
             {
                 utcStart = now.Date;
                 utcEndExclusive = utcStart.AddDays(1);
+            }
+            else if (quick == "yesterday")
+            {
+                utcStart = now.Date.AddDays(-1);
+                utcEndExclusive = now.Date;
             }
             else if (quick == "week")
             {
@@ -142,15 +153,6 @@ public class SalesController : Controller
                 utcEndExclusive = utcStart.AddDays(1);
         }
 
-        var voidedSales = _db.Sales.AsNoTracking()
-          .Include(s => s.Station)
-          .Include(s => s.Customer)
-          .Where(s => s.Status == SaleStatus.Voided)
-          .Where(s =>
-              (!stationIdEffective.HasValue || s.StationId == stationIdEffective.Value) &&
-              s.CreatedAt >= utcStart &&
-              s.CreatedAt < utcEndExclusive);
-
         var baseQuery = _db.Sales.AsNoTracking()
             .Include(s => s.Station)
             .Include(s => s.Customer)
@@ -160,13 +162,11 @@ public class SalesController : Controller
                 s.CreatedAt >= utcStart &&
                 s.CreatedAt < utcEndExclusive);
 
-        var total = await baseQuery
-            .Where(s => s.Status == SaleStatus.Completed)
-            .SumAsync(s => (decimal?)s.Total) ?? 0m;
+        var total = await baseQuery.SumAsync(s => (decimal?)s.Total) ?? 0m;
 
-        var lpgKgSoldinRange = baseQuery
-                .SelectMany(s => s.Items)
-                .Sum(i => i.LpgKg ?? 0m);
+        var lpgKgSoldInRange = await baseQuery
+            .SelectMany(s => s.Items)
+            .SumAsync(i => (decimal?)(i.LpgKg ?? 0m)) ?? 0m;
 
         var totalCount = await baseQuery.CountAsync();
 
@@ -174,24 +174,29 @@ public class SalesController : Controller
             .OrderByDescending(s => s.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Include(s => s.Items).ThenInclude(i => i.Product)
+            .Include(s => s.Items)
+                .ThenInclude(i => i.Product)
             .ToListAsync();
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
         ViewBag.StationName = station?.Name ?? "All Stations";
-        ViewBag.StationId = stationIdEffective?.ToString();
 
-        if (IsAdminOverride())
-        {
-            ViewBag.Stations = await _db.Stations.AsNoTracking()
-                .OrderBy(s => s.Name)
-                .Select(s => new SelectListItem(
-                    s.Name,
-                    s.Id.ToString(),
-                    stationIdEffective.HasValue && s.Id == stationIdEffective.Value))
-                .ToListAsync();
-        }
+        // For admin, preserve the user's chosen filter in the dropdown.
+        // For non-admin, preserve their locked station.
+        ViewBag.StationId = isAdminOverride
+            ? stationId?.ToString()
+            : stationIdEffective?.ToString();
+
+        ViewBag.Stations = await _db.Stations.AsNoTracking()
+            .OrderBy(s => s.Name)
+            .Select(s => new SelectListItem
+            {
+                Value = s.Id.ToString(),
+                Text = s.Name,
+                Selected = stationIdEffective.HasValue && s.Id == stationIdEffective.Value
+            })
+            .ToListAsync();
 
         ViewBag.Quick = quick;
         ViewBag.StartDate = utcStart.ToString("yyyy-MM-dd");
@@ -204,7 +209,7 @@ public class SalesController : Controller
         ViewBag.TotalPages = totalPages;
         ViewBag.HasPreviousPage = page > 1;
         ViewBag.HasNextPage = page < totalPages;
-        ViewBag.LpgKgSoldInRange = lpgKgSoldinRange;
+        ViewBag.LpgKgSoldInRange = lpgKgSoldInRange;
 
         return View(sales);
     }

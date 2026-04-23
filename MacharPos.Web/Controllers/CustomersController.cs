@@ -21,8 +21,18 @@ public class CustomersController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(bool showInactive = false, string? search = null)
+    public async Task<IActionResult> Index(
+       bool showInactive = false,
+       string? search = null,
+       string sortBy = "name",
+       string sortDir = "asc",
+       int page = 1,
+       int pageSize = 20)
     {
+        if (page < 1) page = 1;
+        if (pageSize <= 0) pageSize = 20;
+        if (pageSize > 200) pageSize = 200;
+
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
         var station = await _db.Stations
@@ -45,13 +55,63 @@ public class CustomersController : Controller
                 (x.Phone != null && x.Phone.Contains(search)));
         }
 
+        sortBy = (sortBy ?? "name").Trim().ToLowerInvariant();
+        sortDir = (sortDir ?? "asc").Trim().ToLowerInvariant() == "desc" ? "desc" : "asc";
+
+        query = (sortBy, sortDir) switch
+        {
+            ("name", "desc") => query.OrderByDescending(x => x.Name),
+            ("name", _) => query.OrderBy(x => x.Name),
+
+            ("phone", "desc") => query.OrderByDescending(x => x.Phone),
+            ("phone", _) => query.OrderBy(x => x.Phone),
+
+            ("address", "desc") => query.OrderByDescending(x => x.Address),
+            ("address", _) => query.OrderBy(x => x.Address),
+
+            ("stamps", "desc") => query.OrderByDescending(x => x.LoyaltyStampCount),
+            ("stamps", _) => query.OrderBy(x => x.LoyaltyStampCount),
+
+            ("redeemed", "desc") => query.OrderByDescending(x => x.LoyaltyLifetimeRedeemed),
+            ("redeemed", _) => query.OrderBy(x => x.LoyaltyLifetimeRedeemed),
+
+            ("rewards", "desc") => query.OrderByDescending(x => x.LoyaltyAvailableRewards),
+            ("rewards", _) => query.OrderBy(x => x.LoyaltyAvailableRewards),
+
+            ("credit", "desc") => query.OrderByDescending(x => x.IsCreditApproved),
+            ("credit", _) => query.OrderBy(x => x.IsCreditApproved),
+
+            ("limit", "desc") => query.OrderByDescending(x => x.CreditLimit),
+            ("limit", _) => query.OrderBy(x => x.CreditLimit),
+
+            ("status", "desc") => query.OrderByDescending(x => x.IsActive),
+            ("status", _) => query.OrderBy(x => x.IsActive),
+
+            _ => query.OrderBy(x => x.Name)
+        };
+
+        var totalCount = await query.CountAsync();
+
         var customers = await query
-            .OrderBy(x => x.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
+
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
         ViewBag.StationName = station?.Name ?? "Unknown";
         ViewBag.ShowInactive = showInactive;
         ViewBag.Search = search ?? "";
+
+        ViewBag.SortBy = sortBy;
+        ViewBag.SortDir = sortDir;
+
+        ViewBag.Page = page;
+        ViewBag.PageSize = pageSize;
+        ViewBag.TotalCount = totalCount;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.HasPreviousPage = page > 1;
+        ViewBag.HasNextPage = page < totalPages;
 
         return View(customers);
     }

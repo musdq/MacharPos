@@ -5,18 +5,22 @@
     var stationName = (string)ViewBag.StationName;
     bool showInactive = (bool)ViewBag.ShowInactive;
     var search = (string)(ViewBag.Search ?? "");
-    var stationId = ViewBag.StationId as string;
     var currentPage = (int)(ViewBag.Page ?? 1);
     var pageSize = (int)(ViewBag.PageSize ?? 20);
     var totalCount = (int)(ViewBag.TotalCount ?? 0);
     var totalPages = (int)(ViewBag.TotalPages ?? 0);
     var hasPreviousPage = (bool)(ViewBag.HasPreviousPage ?? false);
     var hasNextPage = (bool)(ViewBag.HasNextPage ?? false);
+    var sortBy = (string)(ViewBag.SortBy ?? "name");
+    var sortDir = (string)(ViewBag.SortDir ?? "asc");
+
+    string NextDir(string col) => sortBy == col && sortDir == "asc" ? "desc" : "asc";
+    string SortIndicator(string col) => sortBy == col ? (sortDir == "asc" ? " ▲" : " ▼") : "";
 }
 
 <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
-        <h1 class="h5 mb-0">Customers(@Model.Count() registered customers)</h1>
+        <h1 class="h5 mb-0">Customers (@totalCount registered customers)</h1>
         <div class="text-secondary small">Station: <span class="fw-semibold">@stationName</span></div>
     </div>
 
@@ -44,6 +48,10 @@
 <div class="card shadow-sm">
     <div class="card-body">
         <form class="row g-2 align-items-end" method="get">
+            <input type="hidden" name="page" value="1" />
+            <input type="hidden" name="sortBy" value="@sortBy" />
+            <input type="hidden" name="sortDir" value="@sortDir" />
+
             <div class="col-12 col-md-6">
                 <label class="form-label">Search</label>
                 <input type="text"
@@ -75,22 +83,121 @@
                 <thead>
                     <tr>
                         <th>No</th>
-                        <th>Name</th>
-                        <th>Phone</th>
-                        <th>Address</th>
-                        <th class="text-center">Stamps</th>
-                        <th class="text-center">Rewards Redeemed</th>
-                        <th class="text-center">Available Rewards</th>
-                        <th>Credit</th>
-                        <th class="text-end">Limit</th>
-                        <th>Status</th>
+                        <th>
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="name"
+                               asp-route-sortDir="@NextDir("name")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Name@(SortIndicator("name"))
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="phone"
+                               asp-route-sortDir="@NextDir("phone")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Phone@(SortIndicator("phone"))
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="address"
+                               asp-route-sortDir="@NextDir("address")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Address@(SortIndicator("address"))
+                            </a>
+                        </th>
+                        <th class="text-center">
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="stamps"
+                               asp-route-sortDir="@NextDir("stamps")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Stamps@(SortIndicator("stamps"))
+                            </a>
+                        </th>
+                        <th class="text-center">
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="redeemed"
+                               asp-route-sortDir="@NextDir("redeemed")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Rewards Redeemed@(SortIndicator("redeemed"))
+                            </a>
+                        </th>
+                        <th class="text-center">
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="rewards"
+                               asp-route-sortDir="@NextDir("rewards")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Available Rewards@(SortIndicator("rewards"))
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="credit"
+                               asp-route-sortDir="@NextDir("credit")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Credit@(SortIndicator("credit"))
+                            </a>
+                        </th>
+                        <th class="text-end">
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="limit"
+                               asp-route-sortDir="@NextDir("limit")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Limit@(SortIndicator("limit"))
+                            </a>
+                        </th>
+                        <th>
+                            <a class="text-decoration-none text-dark"
+                               asp-action="Index"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="status"
+                               asp-route-sortDir="@NextDir("status")"
+                               asp-route-page="1"
+                               asp-route-pageSize="@pageSize">
+                                Status@(SortIndicator("status"))
+                            </a>
+                        </th>
                         <th class="text-end"></th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (Model.Any())
                     {
-                        var index = 1;
+                        var index = ((currentPage - 1) * pageSize) + 1;
                         @foreach (var c in Model)
                         {
                             <tr>
@@ -180,7 +287,7 @@
                     else
                     {
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-3">
+                            <td colspan="11" class="text-center text-muted py-3">
                                 No customers found.
                             </td>
                         </tr>
@@ -188,14 +295,17 @@
                 </tbody>
             </table>
         </div>
-      @*   @if (totalPages > 1)
+        @if (totalPages > 1)
         {
             <nav class="mt-3">
                 <ul class="pagination pagination-sm justify-content-end mb-0">
                     <li class="page-item @(hasPreviousPage ? "" : "disabled")">
                         <a class="page-link"
                            asp-action="Index"
-                           asp-route-stationId="@stationId"
+                           asp-route-search="@search"
+                           asp-route-showInactive="@showInactive"
+                           asp-route-sortBy="@sortBy"
+                           asp-route-sortDir="@sortDir"
                            asp-route-page="@(currentPage - 1)"
                            asp-route-pageSize="@pageSize">Previous</a>
                     </li>
@@ -210,7 +320,10 @@
                         <li class="page-item">
                             <a class="page-link"
                                asp-action="Index"
-                               asp-route-stationId="@stationId"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="@sortBy"
+                               asp-route-sortDir="@sortDir"
                                asp-route-page="1"
                                asp-route-pageSize="@pageSize">1</a>
                         </li>
@@ -226,7 +339,10 @@
                         <li class="page-item @(p == currentPage ? "active" : "")">
                             <a class="page-link"
                                asp-action="Index"
-                               asp-route-stationId="@stationId"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="@sortBy"
+                               asp-route-sortDir="@sortDir"
                                asp-route-page="@p"
                                asp-route-pageSize="@pageSize">@p</a>
                         </li>
@@ -242,7 +358,10 @@
                         <li class="page-item">
                             <a class="page-link"
                                asp-action="Index"
-                               asp-route-stationId="@stationId"
+                               asp-route-search="@search"
+                               asp-route-showInactive="@showInactive"
+                               asp-route-sortBy="@sortBy"
+                               asp-route-sortDir="@sortDir"
                                asp-route-page="@totalPages"
                                asp-route-pageSize="@pageSize">@totalPages</a>
                         </li>
@@ -251,13 +370,15 @@
                     <li class="page-item @(hasNextPage ? "" : "disabled")">
                         <a class="page-link"
                            asp-action="Index"
-                           asp-route-stationId="@stationId"
+                           asp-route-search="@search"
+                           asp-route-showInactive="@showInactive"
+                           asp-route-sortBy="@sortBy"
+                           asp-route-sortDir="@sortDir"
                            asp-route-page="@(currentPage + 1)"
                            asp-route-pageSize="@pageSize">Next</a>
                     </li>
                 </ul>
             </nav>
         }
- *@
     </div>
 </div>

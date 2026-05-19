@@ -17,8 +17,7 @@ public static class SeedData
         if (!await db.Stations.AnyAsync())
         {
             db.Stations.AddRange(
-                new Station { Name = "Masaka – Abuja Axis" },
-                new Station { Name = "Borno Station" }
+                new Station { Name = "Masaka – Abuja Axis" }
             );
             await db.SaveChangesAsync();
         }

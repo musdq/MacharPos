@@ -142,4 +142,15 @@ public class ProductsController : Controller
         TempData["Ok"] = $"LPG refills prices updated. Updated {updatedCount} product(s), skipped {skippedCount}.";
         return RedirectToAction(nameof(Index), new { categoryId, showInactive });
     }
+
+    [HttpGet]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var p = await _db.Products.FirstOrDefaultAsync(x => x.Id == id);
+        if (p is null) return NotFound();
+        _db.Products.Remove(p);
+
+        await _db.SaveChangesAsync();
+        return RedirectToAction(nameof(Index));
+    }
 }

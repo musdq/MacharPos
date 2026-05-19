@@ -3,6 +3,7 @@ using MacharPos.Web.Auth;
 using MacharPos.Web.Data;
 using MacharPos.Web.Services;
 using MacharPos.Web.ViewModels.Credit;
+using MacharPos.Web.ViewModels.Sales;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -24,8 +25,6 @@ public class CreditController : Controller
         _stationCtx = stationCtx;
         _users = users;
     }
-
-
 
     // Normalizes date for DATE column ("date") => Kind must NOT be Utc
     private static DateTime AsDateOnly(DateTime dt)
@@ -84,15 +83,14 @@ public class CreditController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        
-
         var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
             return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
-var customers = await _db.Customers.AsNoTracking()
+
+        var customers = await _db.Customers.AsNoTracking()
             .Where(c => c.StationId == stationId && c.IsActive)
             .OrderBy(c => c.Name)
             .ToListAsync();
@@ -107,17 +105,23 @@ var customers = await _db.Customers.AsNoTracking()
         var vm = new CreditSaleCreateVm
         {
             CustomerId = walkin?.Id,
-            Customers = customers.Select(c => new SelectListItem(c.Name, c.Id.ToString(), c.Id == walkin?.Id)).ToList(),
+            Customers = customers.Select(c => new SelectListItem(
+                c.Name == "Walk-in"
+                    ? "Walk-in"
+                    : string.IsNullOrWhiteSpace(c.Phone)
+                        ? c.Name
+                        : $"{c.Name} — {c.Phone}",
+                c.Id.ToString(),
+                c.Id == walkin?.Id)).ToList(),
             Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList(),
             PaymentMethods = Enum.GetValues<PaymentMethod>()
-                .Where(pm => pm != PaymentMethod.Credit) // credit isn't a payment-in method
+                .Where(pm => pm != PaymentMethod.Credit)
                 .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == PaymentMethod.Cash))
                 .ToList(),
-            Lines = new List<CreditSaleLineVm> { new CreditSaleLineVm() }
+            Lines = new List<CreditSaleLineVm> { new CreditSaleLineVm { Qty = 1 } }
         };
 
-        // price map for UI display
-        ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
+        PopulateProductViewBags(products);
 
         return View(vm);
     }
@@ -128,7 +132,6 @@ var customers = await _db.Customers.AsNoTracking()
     public async Task<IActionResult> New(CreditSaleCreateVm vm)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        
 
         var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
@@ -136,67 +139,60 @@ var customers = await _db.Customers.AsNoTracking()
             TempData["Err"] = guard.Message;
             return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
-var user = await _users.GetUserAsync(User);
+
+        var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
-        // Reload dropdowns
-        var customers = await _db.Customers.AsNoTracking()
-            .Where(c => c.StationId == stationId && c.IsActive)
-            .OrderBy(c => c.Name)
-            .ToListAsync();
+        await PopulateDropdownsAsync(vm, stationId);
 
-        var products = await _db.Products.AsNoTracking()
-            .Where(p => p.IsActive)
-            .OrderBy(p => p.Name)
-            .ToListAsync();
-
-        vm.Customers = customers.Select(c => new SelectListItem(c.Name, c.Id.ToString(), c.Id == vm.CustomerId)).ToList();
-        vm.Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList();
-        vm.PaymentMethods = Enum.GetValues<PaymentMethod>()
-            .Where(pm => pm != PaymentMethod.Credit)
-            .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == vm.InitialPaymentMethod))
-            .ToList();
-
-        ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
-
-        vm.Lines = vm.Lines?.Where(l => l.ProductId != Guid.Empty && l.Qty > 0).ToList() ?? new();
-        if (vm.Lines.Count == 0)
-            ModelState.AddModelError("", "Add at least one item.");
+        NormalizeAndValidateLines(vm);
 
         if (vm.InitialPaymentAmount < 0)
             ModelState.AddModelError("", "Initial payment cannot be negative.");
 
         if (!ModelState.IsValid) return View(vm);
 
-        // Phase 2: credit approval + limits
         var customer = await _db.Customers.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == vm.CustomerId && c.StationId == stationId && c.IsActive);
+
         if (customer is null)
         {
             ModelState.AddModelError("", "Invalid customer.");
             return View(vm);
         }
+
         if (!customer.IsCreditApproved)
         {
             ModelState.AddModelError("", "This customer is not approved for credit.");
             return View(vm);
         }
 
-        // Build sale (unit price enforced from DB)
-        var productIds = vm.Lines.Select(l => l.ProductId).Distinct().ToList();
-        var prodMap = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+        var prodMap = await LoadProductsMapAsync(vm);
 
-        // Find active LPG batch if needed
-        var needsLpgBatch = vm.Lines.Any(l => prodMap.TryGetValue(l.ProductId, out var p) && (p.EquivalentKg ?? 0m) > 0m);
-        LpgBatch? activeBatch = null;
-        if (needsLpgBatch)
+        var needsLpgBatch = vm.Lines.Any(l =>
+            l.ProductId != Guid.Empty &&
+            prodMap.TryGetValue(l.ProductId, out var p) &&
+            (p.EquivalentKg ?? 0m) > 0m);
+
+        var activeBatch = needsLpgBatch
+            ? await GetActiveLpgBatchOrModelErrorAsync(stationId)
+            : null;
+
+        if (needsLpgBatch && activeBatch is null)
+            return View(vm);
+
+        var build = BuildCreditSaleItems(vm, prodMap, activeBatch);
+        if (!build.Success)
         {
-            activeBatch = await _db.LpgBatches.FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == LpgBatchStatus.Active);
-            if (activeBatch is null)
-            {
-                ModelState.AddModelError("", "No ACTIVE LPG batch for your station. Create and activate a batch before LPG refill sales.");
-                return View(vm);
-            }
+            ModelState.AddModelError("", build.ErrorMessage ?? "Unable to build credit sale items.");
+            return View(vm);
+        }
+
+        if (activeBatch is not null && build.TotalLpgKg > 0m && activeBatch.RemainingKg < build.TotalLpgKg)
+        {
+            ModelState.AddModelError("",
+                $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N2}kg, attempted {build.TotalLpgKg:N2}kg.");
+            return View(vm);
         }
 
         var sale = new Sale
@@ -209,64 +205,15 @@ var user = await _users.GetUserAsync(User);
             ReceiptNo = $"CR-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
             IsCreditSale = true,
             CreditDueDate = (vm.DueDate?.Date) ?? (customer.CreditDueDays > 0 ? DateTime.UtcNow.Date.AddDays(customer.CreditDueDays) : null),
-            CreditNotes = string.IsNullOrWhiteSpace(vm.Notes) ? null : vm.Notes.Trim()
+            CreditNotes = string.IsNullOrWhiteSpace(vm.Notes) ? null : vm.Notes.Trim(),
+            Items = new List<SaleItem>()
         };
 
-        decimal subtotal = 0m;
-        decimal totalLpgKg = 0m;
-
-        foreach (var line in vm.Lines)
-        {
-            if (!prodMap.TryGetValue(line.ProductId, out var p))
-                continue;
-
-            var qty = line.Qty;
-            var unitPrice = p.DefaultUnitPrice; // enforce
-            var lineTotal = qty * unitPrice;
-
-            var item = new SaleItem
-            {
-                ProductId = p.Id,
-                Qty = qty,
-                UnitPrice = unitPrice,
-                LineTotal = lineTotal
-            };
-
-            var eqKg = p.EquivalentKg ?? 0m;
-            if (eqKg > 0m && activeBatch is not null)
-            {
-                var lpgKg = qty * eqKg;
-                item.LpgBatchId = activeBatch.Id;
-                item.LpgKg = lpgKg;
-
-                // Phase 6.2: stamp LPG cost at time of sale (for stable margins later)
-                if (activeBatch.CostPerKg.HasValue)
-                {
-                    item.UnitCostAtSale = activeBatch.CostPerKg.Value;
-                    item.TotalCostAtSale = lpgKg * activeBatch.CostPerKg.Value;
-                }
-                totalLpgKg += lpgKg;
-            }
-
-            subtotal += lineTotal;
-            sale.Items.Add(item);
-        }
-
-        sale.Subtotal = subtotal;
+        sale.Items.AddRange(build.Items);
+        sale.Subtotal = build.Subtotal;
         sale.DiscountAmount = 0m;
-        sale.Total = subtotal;
+        sale.Total = build.Subtotal;
 
-        // LPG stock check
-        if (activeBatch is not null && totalLpgKg > 0m)
-        {
-            if (activeBatch.RemainingKg < totalLpgKg)
-            {
-                ModelState.AddModelError("", $"Not enough LPG in active batch. Remaining {activeBatch.RemainingKg:N0}kg, attempted {totalLpgKg:N0}kg.");
-                return View(vm);
-            }
-        }
-
-        // credit balances
         var initialPaid = vm.InitialPaymentAmount;
         if (initialPaid > sale.Total) initialPaid = sale.Total;
 
@@ -274,10 +221,8 @@ var user = await _users.GetUserAsync(User);
         sale.CreditBalance = sale.Total - initialPaid;
         sale.CreditStatus = sale.CreditBalance <= 0 ? CreditStatus.Settled : CreditStatus.Open;
 
-        // Enforce credit limit (if set > 0)
         if (customer.CreditLimit > 0m && sale.CreditBalance > 0m)
         {
-            // Current outstanding for this customer (open credit sales)
             var outstanding = await _db.Sales.AsNoTracking()
                 .Where(s => s.StationId == stationId
                             && s.CustomerId == customer.Id
@@ -300,14 +245,12 @@ var user = await _users.GetUserAsync(User);
             _db.Sales.Add(sale);
             await _db.SaveChangesAsync();
 
-            // apply LPG sold to batch
-            if (activeBatch is not null && totalLpgKg > 0m)
+            if (activeBatch is not null && build.TotalLpgKg > 0m)
             {
-                activeBatch.SoldKg += totalLpgKg;
+                activeBatch.SoldKg += build.TotalLpgKg;
                 await _db.SaveChangesAsync();
             }
 
-            // initial payment record
             if (initialPaid > 0)
             {
                 _db.CreditPayments.Add(new CreditPayment
@@ -331,6 +274,190 @@ var user = await _users.GetUserAsync(User);
         }
 
         return RedirectToAction(nameof(Receipt), new { id = sale.Id });
+    }
+
+    private async Task PopulateDropdownsAsync(CreditSaleCreateVm vm, Guid stationId)
+    {
+        var customers = await _db.Customers.AsNoTracking()
+            .Where(c => c.StationId == stationId && c.IsActive)
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+
+        var products = await _db.Products.AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+
+        vm.Customers = customers.Select(c => new SelectListItem(
+            c.Name == "Walk-in"
+                ? "Walk-in"
+                : string.IsNullOrWhiteSpace(c.Phone)
+                    ? c.Name
+                    : $"{c.Name} — {c.Phone}",
+            c.Id.ToString(),
+            c.Id == vm.CustomerId)).ToList();
+
+        vm.Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList();
+
+        vm.PaymentMethods = Enum.GetValues<PaymentMethod>()
+            .Where(pm => pm != PaymentMethod.Credit)
+            .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == vm.InitialPaymentMethod))
+            .ToList();
+
+        PopulateProductViewBags(products);
+    }
+
+    private void PopulateProductViewBags(List<Product> products)
+    {
+        ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
+        ViewBag.ProductEquivalentKgs = products.ToDictionary(p => p.Id.ToString(), p => p.EquivalentKg ?? 0m);
+    }
+
+    private void NormalizeAndValidateLines(CreditSaleCreateVm vm)
+    {
+        vm.Lines = vm.Lines?
+            .Where(l => l.ProductId != Guid.Empty)
+            .ToList() ?? new List<CreditSaleLineVm>();
+
+        if (vm.Lines.Count == 0)
+        {
+            ModelState.AddModelError("", "Add at least one valid item.");
+            return;
+        }
+
+        foreach (var line in vm.Lines)
+        {
+            if (line.Qty <= 0)
+            {
+                ModelState.AddModelError("", "Quantity must be greater than zero.");
+                continue;
+            }
+
+            if (line.EntryMode == SaleEntryMode.ByAmount)
+            {
+                if (!line.Amount.HasValue || line.Amount.Value <= 0)
+                {
+                    ModelState.AddModelError("", "Amount must be greater than zero.");
+                    continue;
+                }
+            }
+        }
+    }
+
+    private async Task<Dictionary<Guid, Product>> LoadProductsMapAsync(CreditSaleCreateVm vm)
+    {
+        var productIds = vm.Lines.Select(l => l.ProductId).Distinct().ToList();
+
+        return await _db.Products.AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+    }
+
+    private async Task<LpgBatch?> GetActiveLpgBatchOrModelErrorAsync(Guid stationId)
+    {
+        var batch = await _db.LpgBatches
+            .FirstOrDefaultAsync(b => b.StationId == stationId && b.Status == LpgBatchStatus.Active);
+
+        if (batch is null)
+            ModelState.AddModelError("", "No ACTIVE LPG batch for your station. Create and activate a batch before LPG refill sales.");
+
+        return batch;
+    }
+
+    private (bool Success, string? ErrorMessage, List<SaleItem> Items, decimal Subtotal, decimal TotalLpgKg)
+        BuildCreditSaleItems(CreditSaleCreateVm vm, Dictionary<Guid, Product> prodMap, LpgBatch? activeBatch)
+    {
+        var items = new List<SaleItem>();
+        decimal subtotal = 0m;
+        decimal totalLpgKg = 0m;
+
+        foreach (var line in vm.Lines)
+        {
+            if (!prodMap.TryGetValue(line.ProductId, out var p))
+                continue;
+
+            var unitPrice = p.DefaultUnitPrice; // Credit sale price remains controlled by Product.DefaultUnitPrice.
+            var eqKg = p.EquivalentKg ?? 0m;
+            var isLpg = eqKg > 0m;
+
+            decimal qtyToStore = line.Qty;
+            decimal lineTotal;
+            decimal? lpgKg = null;
+
+            if (isLpg)
+            {
+                if (line.EntryMode == SaleEntryMode.ByAmount)
+                {
+                    if (!line.Amount.HasValue || line.Amount.Value <= 0)
+                        return (false, "Amount must be greater than zero.", new(), 0m, 0m);
+
+                    if (unitPrice <= 0m)
+                        return (false, "Unit price must be greater than zero.", new(), 0m, 0m);
+
+                    lineTotal = Math.Round(line.Amount.Value, 2, MidpointRounding.AwayFromZero);
+                    lpgKg = Math.Round(line.Amount.Value / unitPrice, 2, MidpointRounding.AwayFromZero);
+
+                    // By Amount records one cylinder/line unless cashier deliberately sets a higher cylinder count.
+                    if (qtyToStore <= 0) qtyToStore = 1;
+                }
+                else
+                {
+                    if (eqKg <= 0m)
+                        return (false, $"Product '{p.Name}' does not have a valid EquivalentKg.", new(), 0m, 0m);
+
+                    lpgKg = Math.Round(line.Qty * eqKg, 2, MidpointRounding.AwayFromZero);
+                    lineTotal = Math.Round(line.Qty * unitPrice, 2, MidpointRounding.AwayFromZero);
+                }
+            }
+            else
+            {
+                if (line.EntryMode == SaleEntryMode.ByAmount)
+                {
+                    if (!line.Amount.HasValue || line.Amount.Value <= 0)
+                        return (false, "Amount must be greater than zero.", new(), 0m, 0m);
+
+                    lineTotal = Math.Round(line.Amount.Value, 2, MidpointRounding.AwayFromZero);
+                    if (qtyToStore <= 0) qtyToStore = 1;
+                }
+                else
+                {
+                    lineTotal = Math.Round(line.Qty * unitPrice, 2, MidpointRounding.AwayFromZero);
+                }
+            }
+
+            var item = new SaleItem
+            {
+                ProductId = p.Id,
+                Qty = qtyToStore,
+                UnitPrice = unitPrice,
+                LineTotal = lineTotal
+            };
+
+            if (isLpg)
+            {
+                if (activeBatch is null)
+                    return (false, "No ACTIVE LPG batch for your station.", new(), 0m, 0m);
+
+                item.LpgBatchId = activeBatch.Id;
+                item.LpgKg = lpgKg ?? 0m;
+
+                if (activeBatch.CostPerKg.HasValue)
+                {
+                    item.UnitCostAtSale = activeBatch.CostPerKg.Value;
+                    item.TotalCostAtSale = item.LpgKg.Value * activeBatch.CostPerKg.Value;
+                }
+
+                totalLpgKg += item.LpgKg.Value;
+            }
+
+            subtotal += lineTotal;
+            items.Add(item);
+        }
+
+        if (items.Count == 0)
+            return (false, "Add at least one valid item.", new(), 0m, 0m);
+
+        return (true, null, items, subtotal, totalLpgKg);
     }
 
     [HttpGet]
@@ -453,7 +580,7 @@ var user = await _users.GetUserAsync(User);
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        
+
 
         var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
@@ -461,9 +588,9 @@ var user = await _users.GetUserAsync(User);
             TempData["Err"] = guard.Message;
             return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
-var sale = await _db.Sales.AsNoTracking()
-            .Include(s => s.Customer)
-            .FirstOrDefaultAsync(s => s.Id == id && s.StationId == stationId && s.IsCreditSale);
+        var sale = await _db.Sales.AsNoTracking()
+                    .Include(s => s.Customer)
+                    .FirstOrDefaultAsync(s => s.Id == id && s.StationId == stationId && s.IsCreditSale);
 
         if (sale is null) return NotFound();
 
@@ -490,7 +617,7 @@ var sale = await _db.Sales.AsNoTracking()
     public async Task<IActionResult> AddPayment(CreditPaymentVm vm)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
-        
+
 
         var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
         if (!guard.Allowed)
@@ -498,7 +625,7 @@ var sale = await _db.Sales.AsNoTracking()
             TempData["Err"] = guard.Message;
             return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
         }
-var user = await _users.GetUserAsync(User);
+        var user = await _users.GetUserAsync(User);
         if (user is null) return Unauthorized();
 
         var sale = await _db.Sales.FirstOrDefaultAsync(s => s.Id == vm.SaleId && s.StationId == stationId && s.IsCreditSale);

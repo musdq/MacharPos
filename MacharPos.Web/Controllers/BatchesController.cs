@@ -146,6 +146,7 @@ public class BatchesController : Controller
 
         var query = _db.SaleItems
             .Include(x => x.Sale)
+            .Where(x => x.Sale.Status == SaleStatus.Completed)
             .Where(x => x.LpgBatchId == id);
 
         var totalSales = await query.SumAsync(x => x.LineTotal);

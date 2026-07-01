@@ -106,19 +106,19 @@ public class SalesController : Controller
         }
 
         // Determine range (UTC)
-        DateTime utcStart;
-        DateTime utcEndExclusive;
+        DateTime? utcStart;
+        DateTime? utcEndExclusive;
 
         var now = DateTime.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(quick))
         {
-            quick = quick.ToLowerInvariant();
+            quick = quick.ToLowerInvariant().Replace(" ", "");
 
             if (quick == "today")
             {
                 utcStart = now.Date;
-                utcEndExclusive = utcStart.AddDays(1);
+                utcEndExclusive = utcStart.Value.AddDays(1);
             }
             else if (quick == "yesterday")
             {
@@ -128,17 +128,52 @@ public class SalesController : Controller
             else if (quick == "week")
             {
                 utcEndExclusive = now.Date.AddDays(1);
-                utcStart = utcEndExclusive.AddDays(-7);
+                utcStart = utcEndExclusive.Value.AddDays(-7);
+            }
+            else if (quick == "lastweek")
+            {
+                var today = now.Date;
+
+                // Monday start of week
+                int diff = ((int)today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+                var thisWeekStart = today.AddDays(-diff);
+
+                utcStart = thisWeekStart.AddDays(-7);
+                utcEndExclusive = thisWeekStart;
             }
             else if (quick == "month")
             {
                 utcStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-                utcEndExclusive = utcStart.AddMonths(1);
+                utcEndExclusive = utcStart.Value.AddMonths(1);
+            }
+            else if (quick == "lastmonth")
+            {
+                var thisMonthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+                utcStart = thisMonthStart.AddMonths(-1);
+                utcEndExclusive = thisMonthStart;
+            }
+            else if (quick == "year")
+            {
+                utcStart = new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                utcEndExclusive = utcStart.Value.AddYears(1);
+            }
+            else if (quick == "lastyear")
+            {
+                var thisYearStart = new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+                utcStart = thisYearStart.AddYears(-1);
+                utcEndExclusive = thisYearStart;
+            }
+            else if (quick == "alltime")
+            {
+                utcStart = null;
+                utcEndExclusive = null;
             }
             else
             {
                 utcStart = now.Date;
-                utcEndExclusive = utcStart.AddDays(1);
+                utcEndExclusive = utcStart.Value.AddDays(1);
             }
         }
         else
@@ -149,8 +184,8 @@ public class SalesController : Controller
             utcStart = DateTime.SpecifyKind(s, DateTimeKind.Utc);
             utcEndExclusive = DateTime.SpecifyKind(e.AddDays(1), DateTimeKind.Utc);
 
-            if (utcEndExclusive < utcStart.AddDays(1))
-                utcEndExclusive = utcStart.AddDays(1);
+            if (utcEndExclusive < utcStart.Value.AddDays(1))
+                utcEndExclusive = utcStart.Value.AddDays(1);
         }
 
         var baseQuery = _db.Sales.AsNoTracking()
@@ -199,8 +234,8 @@ public class SalesController : Controller
             .ToListAsync();
 
         ViewBag.Quick = quick;
-        ViewBag.StartDate = utcStart.ToString("yyyy-MM-dd");
-        ViewBag.EndDate = utcEndExclusive.AddDays(-1).ToString("yyyy-MM-dd");
+        ViewBag.StartDate = utcStart?.ToString("yyyy-MM-dd");
+        ViewBag.EndDate = utcEndExclusive?.AddDays(-1).ToString("yyyy-MM-dd");
         ViewBag.Total = total;
 
         ViewBag.Page = page;

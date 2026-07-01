@@ -314,6 +314,9 @@ namespace MacharPos.Web.Migrations
                     b.Property<string>("Sku")
                         .HasColumnType("text");
 
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("UnitType")
                         .IsRequired()
                         .HasColumnType("text");
@@ -323,6 +326,8 @@ namespace MacharPos.Web.Migrations
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("Name");
+
+                    b.HasIndex("StationId");
 
                     b.ToTable("Products");
                 });
@@ -891,7 +896,15 @@ namespace MacharPos.Web.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("MacharPos.Core.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Category");
+
+                    b.Navigation("Station");
                 });
 
             modelBuilder.Entity("MacharPos.Core.Entities.Sale", b =>

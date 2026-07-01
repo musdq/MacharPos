@@ -137,7 +137,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // SeedData can remain, but now it won't crash because DB is configured
-//await SeedData.RunAsync(app);
+await SeedData.RunAsync(app);
 
 app.Run();
 public partial class Program { }

@@ -11,6 +11,8 @@ namespace MacharPos.Core.Entities
         public Guid Id { get; set; } = Guid.NewGuid();
         public Guid CategoryId { get; set; }
         public ProductCategory? Category { get; set; }
+        public Guid StationId { get; set; }
+        public Station? Station { get; set; }
 
         public string Name { get; set; } = "";
         public string? Sku { get; set; }

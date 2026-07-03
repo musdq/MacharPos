@@ -130,8 +130,9 @@ app.MapControllerRoute(
 // --------------------
 // Migrations + seeding
 // --------------------
-using (var scope = app.Services.CreateScope())
+if (app.Environment.IsDevelopment())
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
 }

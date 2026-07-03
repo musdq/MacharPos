@@ -1,18 +1,22 @@
-﻿@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.Identity
 @inject SignInManager<MacharPos.Web.Auth.ApplicationUser> SignInManager
+@{
+    var isSignedIn = SignInManager.IsSignedIn(User);
+}
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@ViewData["Title"] - Machar POS</title>
+    <title>@ViewData["Title"] - Machar Oil and Gas Ltd</title>
+    <meta name="description" content="Machar Oil and Gas Ltd provides PMS, LPG, AGO logistics, retail and consulting services across Nigeria." />
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
-<body>
-    @if (SignInManager.IsSignedIn(User))
+<body class="@(isSignedIn ? "portal-body" : "public-body")">
+    @if (isSignedIn)
     {
         <header class="no-print">
             <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom">
@@ -25,10 +29,9 @@
 
                     <div class="collapse navbar-collapse" id="mainNav">
                         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                            <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a>></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a></li>
                             <li class="nav-item"><a class="nav-link" asp-controller="Sales" asp-action="New">New Sale</a></li>
-                            <li class="nav-item"><a class="nav-link" asp-controller="Sales" asp-action="Index">Sales</a></li>                      
-                          
+                            <li class="nav-item"><a class="nav-link" asp-controller="Sales" asp-action="Index">Sales</a></li>
 
                             @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
                             {
@@ -38,9 +41,7 @@
                                 <li class="nav-item"><a class="nav-link" asp-controller="Batches" asp-action="Index">Batches</a></li>
                                 <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="New">New Credit Sale</a></li>
                                 <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="Index">Credit Sales</a></li>
-                            @*     <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="Aging">Credit Aging</a></li> *@
                                 <li class="nav-item"><a class="nav-link" asp-controller="DailyClose" asp-action="Index">Daily Close</a></li>
-                            @*     <li class="nav-item"><a class="nav-link" asp-controller="ShiftClose" asp-action="Index">Shift Close</a></li> *@
                             }
 
                             @if (User.IsInRole("Admin"))
@@ -49,8 +50,6 @@
                                 <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Index">Admin</a></li>
                                 <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="HQIndex">HQ Dashboard</a></li>
                             }
-                            
-
                         </ul>
 
                         <div class="d-flex gap-2 align-items-center">
@@ -65,10 +64,63 @@
             </nav>
         </header>
     }
+    else
+    {
+        <header class="public-header">
+            <nav class="navbar navbar-expand-lg navbar-light">
+                <div class="container">
+                    <a class="navbar-brand public-brand" asp-controller="Home" asp-action="Index">
+                        <span class="brand-mark">M</span>
+                        <span>Machar Oil &amp; Gas</span>
+                    </a>
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#publicNav">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="publicNav">
+                        <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                            <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Index">Home</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="About">About Us</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Directors">Directors</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Contact">Contact</a></li>
+                            <li class="nav-item ms-lg-2"><a class="btn btn-sm btn-outline-primary" asp-controller="Account" asp-action="Login">Staff Login</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+        </header>
+    }
 
-    <main class="container-fluid py-3">
+    <main class="@(isSignedIn ? "container-fluid py-3" : "public-main")">
         @RenderBody()
     </main>
+
+    @if (!isSignedIn)
+    {
+        <footer class="public-footer">
+            <div class="container">
+                <div class="row g-4">
+                    <div class="col-lg-5">
+                        <h4>Machar Oil and Gas Ltd</h4>
+                        <p>Delivering reliable energy solutions in PMS, LPG, AGO logistics, retail and consulting.</p>
+                    </div>
+                    <div class="col-lg-3">
+                        <h5>Quick Links</h5>
+                        <a asp-controller="Home" asp-action="Index">Home</a>
+                        <a asp-controller="Home" asp-action="About">About Us</a>
+                        <a asp-controller="Home" asp-action="Directors">Directors</a>
+                        <a asp-controller="Home" asp-action="Contact">Contact</a>
+                    </div>
+                    <div class="col-lg-4">
+                        <h5>Staff Portal</h5>
+                        <p>Authorized staff can access MacharPOS through the secure staff login.</p>
+                        <a class="btn btn-outline-light btn-sm" asp-controller="Account" asp-action="Login">Staff Login</a>
+                    </div>
+                </div>
+                <div class="footer-bottom">© @DateTime.Now.Year Machar Oil and Gas Ltd. All rights reserved.</div>
+            </div>
+        </footer>
+    }
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     @RenderSection("Scripts", required: false)

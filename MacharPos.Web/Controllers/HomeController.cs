@@ -3,8 +3,16 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MacharPos.Web.Controllers;
 
-[Authorize]
+[AllowAnonymous]
 public class HomeController : Controller
 {
-    public IActionResult Index() => RedirectToAction("Index","Dashboard");
+    public IActionResult Index() => View();
+
+    public IActionResult About() => View();
+
+    public IActionResult Directors() => View();
+
+    public IActionResult Contact() => View();
+
+    public IActionResult Portal() => RedirectToAction("Login", "Account");
 }

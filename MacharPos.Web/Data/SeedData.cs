@@ -17,7 +17,8 @@ public static class SeedData
         if (!await db.Stations.AnyAsync())
         {
             db.Stations.AddRange(
-                new Station { Name = "Masaka – Abuja Axis" }
+                new Station { Name = "Masaka" },
+                new Station { Name = "Borno" }
             );
             await db.SaveChangesAsync();
         }
@@ -66,30 +67,7 @@ public static class SeedData
             await userMgr.AddToRoleAsync(cashier, "Cashier");
         }
 
-        // Categories + products (if empty)
-        if (!await db.ProductCategories.AnyAsync())
-        {
-            var catRefills = new ProductCategory { Name = "LPG Refills" };
-            var catCylinders = new ProductCategory { Name = "Cylinders" };
-            var catAccessories = new ProductCategory { Name = "Accessories" };
-
-            db.ProductCategories.AddRange(catRefills, catCylinders, catAccessories);
-            await db.SaveChangesAsync();
-
-            decimal[] sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12.5m, 25, 50];
-            foreach (var s in sizes)
-            {
-                db.Products.Add(new Product
-                {
-                    CategoryId = catRefills.Id,
-                    Name = $"LPG Refill – {s}kg",
-                    UnitType = "Piece",
-                    DefaultUnitPrice = 0m,
-                    EquivalentKg = s
-                });
-            }
-            await db.SaveChangesAsync();
-        }
+       
 
         // Walk-in customer per station
         foreach (var st in await db.Stations.ToListAsync())
@@ -97,6 +75,32 @@ public static class SeedData
             var exists = await db.Customers.AnyAsync(c => c.StationId == st.Id && c.Name == "Walk-in");
             if (!exists)
                 db.Customers.Add(new Customer { StationId = st.Id, Name = "Walk-in" });
+
+            // Categories + products (if empty)
+            if (!await db.ProductCategories.AnyAsync())
+            {
+                var catRefills = new ProductCategory { Name = "LPG Refills" };
+                var catCylinders = new ProductCategory { Name = "Cylinders" };
+                var catAccessories = new ProductCategory { Name = "Accessories" };
+
+                db.ProductCategories.AddRange(catRefills, catCylinders, catAccessories);
+                await db.SaveChangesAsync();
+
+                decimal[] sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12.5m, 25, 50];
+                foreach (var s in sizes)
+                {
+                    db.Products.Add(new Product
+                    {
+                        CategoryId = catRefills.Id,
+                        StationId = st.Id,
+                        Name = $"LPG Refill – {s}kg",
+                        UnitType = "Piece",
+                        DefaultUnitPrice = 0m,
+                        EquivalentKg = s
+                    });
+                }
+             
+            }
         }
         await db.SaveChangesAsync();
     }

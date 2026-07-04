@@ -130,15 +130,13 @@ app.MapControllerRoute(
 // --------------------
 // Migrations + seeding
 // --------------------
-if (app.Environment.IsDevelopment())
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-}
+
+    //using var scope = app.Services.CreateScope();
+    //var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    //await db.Database.MigrateAsync();
 
 // SeedData can remain, but now it won't crash because DB is configured
-await SeedData.RunAsync(app);
+    await SeedData.RunAsync(app);
 
 app.Run();
 public partial class Program { }

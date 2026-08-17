@@ -31,6 +31,10 @@ namespace MacharPos.Web.Data
 
         public DbSet<SyncQueueItem> SyncQueue => Set<SyncQueueItem>();
 
+        public DbSet<ExpenseRequest> ExpenseRequests => Set<ExpenseRequest>();
+        public DbSet<CashMovement> CashMovements => Set<CashMovement>();
+        public DbSet<CashReconciliation> CashReconciliations => Set<CashReconciliation>();
+
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);
@@ -98,6 +102,77 @@ namespace MacharPos.Web.Data
 
             b.Entity<LoyaltyTransaction>()
                 .HasIndex(x => x.SaleId);
+
+            b.Entity<ExpenseRequest>(e =>
+            {
+                e.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+                e.Property(x => x.Reason).HasMaxLength(500);
+                e.Property(x => x.RequestedByUserId).HasMaxLength(450);
+                e.Property(x => x.ReviewedByUserId).HasMaxLength(450);
+                e.Property(x => x.ReviewNote).HasMaxLength(500);
+                e.Property(x => x.EvidenceOriginalFileName).HasMaxLength(255);
+                e.Property(x => x.EvidenceContentType).HasMaxLength(100);
+                e.Property(x => x.ExpenseDateTimeUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.CreatedAtUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.ReviewedAtUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.PaidAtUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.PaymentCancelledAtUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.PaidByUserId).HasMaxLength(450);
+                e.Property(x => x.PaymentCancelledByUserId).HasMaxLength(450);
+                e.Property(x => x.Payee).HasMaxLength(200);
+                e.Property(x => x.PaymentReference).HasMaxLength(200);
+                e.Property(x => x.PaymentNote).HasMaxLength(500);
+                e.Property(x => x.PaymentEvidenceOriginalFileName).HasMaxLength(255);
+                e.Property(x => x.PaymentEvidenceContentType).HasMaxLength(100);
+
+                e.HasOne(x => x.Station)
+                    .WithMany()
+                    .HasForeignKey(x => x.StationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasIndex(x => new { x.StationId, x.ExpenseDateTimeUtc });
+                e.HasIndex(x => new { x.Status, x.CreatedAtUtc });
+                e.HasIndex(x => new { x.PaymentStatus, x.PaidAtUtc });
+                e.HasIndex(x => new { x.RequestedByUserId, x.CreatedAtUtc });
+            });
+
+            b.Entity<CashMovement>(e =>
+            {
+                e.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+                e.Property(x => x.MainCashImpact).HasColumnType("numeric(18,2)");
+                e.Property(x => x.PettyCashImpact).HasColumnType("numeric(18,2)");
+                e.Property(x => x.OccurredAtUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.CreatedAtUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.Description).HasMaxLength(500);
+                e.Property(x => x.Reference).HasMaxLength(200);
+                e.Property(x => x.EnteredByUserId).HasMaxLength(450);
+
+                e.HasOne(x => x.Station).WithMany().HasForeignKey(x => x.StationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.CounterpartyStation).WithMany().HasForeignKey(x => x.CounterpartyStationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.ReversesMovement).WithMany().HasForeignKey(x => x.ReversesMovementId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasIndex(x => new { x.StationId, x.OccurredAtUtc });
+                e.HasIndex(x => x.TransferGroupId);
+                e.HasIndex(x => x.ReversesMovementId).IsUnique();
+            });
+
+            b.Entity<CashReconciliation>(e =>
+            {
+                e.Property(x => x.ReconciliationDate).HasColumnType("date");
+                e.Property(x => x.Notes).HasMaxLength(1000);
+                e.Property(x => x.ReopenReason).HasMaxLength(500);
+                e.Property(x => x.ClosedByUserId).HasMaxLength(450);
+                e.Property(x => x.ReopenedByUserId).HasMaxLength(450);
+                e.Property(x => x.ClosedAtUtc).HasColumnType("timestamp with time zone");
+                e.Property(x => x.ReopenedAtUtc).HasColumnType("timestamp with time zone");
+
+                e.HasOne(x => x.Station).WithMany().HasForeignKey(x => x.StationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                e.HasIndex(x => new { x.StationId, x.ReconciliationDate }).IsUnique();
+            });
 
 
             // Helpful indexes

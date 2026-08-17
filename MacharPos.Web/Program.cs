@@ -4,9 +4,14 @@ using MacharPos.Web.Data;
 using MacharPos.Web.Services;
 using MacharPos.Web.Services.HQ;
 using MacharPos.Web.Services.Loyalty;
+using MacharPos.Web.Services.Expenses;
+using MacharPos.Web.Services.Finance;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using QuestPDF.Infrastructure;
+
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -109,6 +114,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IStationContext, StationContext>();
 builder.Services.AddScoped<IHqDashboardService, HqDashboardService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
+builder.Services.AddScoped<ExpenseEvidenceService>();
+builder.Services.AddSingleton<IExpenseReportPdfService, ExpenseReportPdfService>();
+builder.Services.AddScoped<ICashLedgerService, CashLedgerService>();
 
 var app = builder.Build();
 
@@ -130,13 +138,14 @@ app.MapControllerRoute(
 // --------------------
 // Migrations + seeding
 // --------------------
-
-    //using var scope = app.Services.CreateScope();
-    //var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    //await db.Database.MigrateAsync();
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 // SeedData can remain, but now it won't crash because DB is configured
-    await SeedData.RunAsync(app);
+await SeedData.RunAsync(app);
 
 app.Run();
 public partial class Program { }

@@ -177,6 +177,7 @@ public class DailyCloseController : Controller
 
         var vm = new DailyCloseVm
         {
+            StationId = stationId,
             StationName = station.Name,
             CloseDate = closeDate,
             Existing = existing,

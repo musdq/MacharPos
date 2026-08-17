@@ -1,0 +1,225 @@
+@using MacharPos.Core.Entities
+@using MacharPos.Web.Services.Expenses
+@model MacharPos.Web.ViewModels.Expenses.ExpenseReportVm
+
+@{
+    ViewData["Title"] = "Expense Reports";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="h4 mb-1">Expense Reports</h1>
+        <div class="text-secondary">Review and download company expenses by reporting period.</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-dark" asp-action="Manage">Manage requests</a>
+        <a class="btn btn-danger"
+           asp-action="ExportPdf"
+           asp-route-period="@Model.Filter.Period"
+           asp-route-startDate="@Model.Filter.StartDate?.ToString("yyyy-MM-dd")"
+           asp-route-endDate="@Model.Filter.EndDate?.ToString("yyyy-MM-dd")"
+           asp-route-stationId="@Model.Filter.StationId"
+           asp-route-category="@Model.Filter.Category"
+           asp-route-status="@Model.Filter.Status"
+           asp-route-paymentStatus="@Model.Filter.PaymentStatus">Download PDF</a>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end" id="expense-report-filter">
+            <div class="col-12 col-md-3 col-xl-2">
+                <label class="form-label">Period</label>
+                <select name="period" id="period" class="form-select">
+                    <option value="daily" selected="@(Model.Filter.Period == "daily")">Daily</option>
+                    <option value="weekly" selected="@(Model.Filter.Period == "weekly")">Weekly</option>
+                    <option value="monthly" selected="@(Model.Filter.Period == "monthly")">Monthly</option>
+                    <option value="yearly" selected="@(Model.Filter.Period == "yearly")">Yearly</option>
+                    <option value="custom" selected="@(Model.Filter.Period == "custom")">Custom</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-3 col-xl-2">
+                <label class="form-label">Payment</label>
+                <select name="paymentStatus" class="form-select">
+                    <option value="" selected="@(!Model.Filter.PaymentStatus.HasValue)">All payment states</option>
+                    <option value="Unpaid" selected="@(Model.Filter.PaymentStatus == ExpensePaymentStatus.Unpaid)">Unpaid</option>
+                    <option value="Paid" selected="@(Model.Filter.PaymentStatus == ExpensePaymentStatus.Paid)">Paid</option>
+                    <option value="Cancelled" selected="@(Model.Filter.PaymentStatus == ExpensePaymentStatus.Cancelled)">Cancelled</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3 col-xl-2 custom-date-field">
+                <label class="form-label">Start date</label>
+                <input type="date" name="startDate" class="form-control" value="@Model.Filter.StartDate?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-6 col-md-3 col-xl-2 custom-date-field">
+                <label class="form-label">End date</label>
+                <input type="date" name="endDate" class="form-control" value="@Model.Filter.EndDate?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-12 col-md-3 col-xl-2">
+                <label class="form-label">Station</label>
+                <select name="stationId" class="form-select">
+                    <option value="">All stations</option>
+                    @foreach (var station in Model.Stations)
+                    {
+                        <option value="@station.Id" selected="@(Model.Filter.StationId == station.Id)">@station.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-3 col-xl-2">
+                <label class="form-label">Category</label>
+                <select name="category" class="form-select">
+                    <option value="">All categories</option>
+                    @foreach (ExpenseCategory category in Enum.GetValues<ExpenseCategory>())
+                    {
+                        <option value="@category" selected="@(Model.Filter.Category == category)">@ExpenseReporting.CategoryName(category)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-3 col-xl-2">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="" selected="@(!Model.Filter.Status.HasValue)">All statuses</option>
+                    <option value="Pending" selected="@(Model.Filter.Status == ExpenseStatus.Pending)">Pending</option>
+                    <option value="Approved" selected="@(Model.Filter.Status == ExpenseStatus.Approved)">Approved</option>
+                    <option value="Rejected" selected="@(Model.Filter.Status == ExpenseStatus.Rejected)">Rejected</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button class="btn btn-outline-dark">Apply report filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-12 col-md-3">
+        <div class="card shadow-sm h-100 border-success expense-summary-card">
+            <div class="card-body">
+                <div class="text-secondary small">Paid expenses (realized)</div>
+                <div class="h4 mb-1">₦@Model.PaidAmount.ToString("N2")</div>
+                <div class="small">@Model.PaidCount.ToString("N0") record(s)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="card shadow-sm h-100 border-primary expense-summary-card">
+            <div class="card-body">
+                <div class="text-secondary small">Approved, unpaid</div>
+                <div class="h4 mb-1">₦@Model.ApprovedUnpaidAmount.ToString("N2")</div>
+                <div class="small">@Model.ApprovedUnpaidCount.ToString("N0") record(s)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="card shadow-sm h-100 border-warning expense-summary-card">
+            <div class="card-body">
+                <div class="text-secondary small">Pending requests</div>
+                <div class="h4 mb-1">₦@Model.PendingAmount.ToString("N2")</div>
+                <div class="small">@Model.PendingCount.ToString("N0") record(s)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-3">
+        <div class="card shadow-sm h-100 border-danger expense-summary-card">
+            <div class="card-body">
+                <div class="text-secondary small">Rejected requests</div>
+                <div class="h4 mb-1">₦@Model.RejectedAmount.ToString("N2")</div>
+                <div class="small">@Model.RejectedCount.ToString("N0") record(s)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between gap-2">
+        <div>
+            <div class="fw-semibold">@Model.PeriodLabel report</div>
+            <div class="text-secondary small">@Model.RangeStartLocal.ToString("dd MMM yyyy") – @Model.RangeEndLocal.ToString("dd MMM yyyy")</div>
+        </div>
+        <span class="badge text-bg-light align-self-center">@Model.Items.Count.ToString("N0") record(s)</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 expense-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date / time</th>
+                        <th>Station</th>
+                        <th>Requested by</th>
+                        <th>Category / reason</th>
+                        <th>Status</th>
+                        <th>Payment</th>
+                        <th class="text-end">Amount</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr><td colspan="8" class="text-center text-secondary py-5">No expense requests match this report.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td class="text-nowrap">
+                                    <div class="fw-semibold">@item.ExpenseDateTimeLocal.ToString("dd MMM yyyy")</div>
+                                    <div class="text-secondary small">@item.ExpenseDateTimeLocal.ToString("HH:mm") WAT</div>
+                                </td>
+                                <td>@item.StationName</td>
+                                <td>@item.RequesterName</td>
+                                <td>
+                                    <div class="fw-semibold">@ExpenseReporting.CategoryName(item.Category)</div>
+                                    <div class="text-secondary small expense-reason">@item.Reason</div>
+                                </td>
+                                <td>
+                                    @if (item.Status == ExpenseStatus.Approved)
+                                    {
+                                        <span class="badge text-bg-success">Approved</span>
+                                    }
+                                    else if (item.Status == ExpenseStatus.Rejected)
+                                    {
+                                        <span class="badge text-bg-danger">Rejected</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-warning">Pending</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (item.Status != ExpenseStatus.Approved) { <span class="text-secondary">—</span> }
+                                    else if (item.PaymentStatus == ExpensePaymentStatus.Paid) { <span class="badge text-bg-dark">Paid</span><div class="small text-secondary">@item.PaymentMethod · @item.PaidAtLocal?.ToString("dd MMM yy")</div> }
+                                    else if (item.PaymentStatus == ExpensePaymentStatus.Cancelled) { <span class="badge text-bg-secondary">Cancelled</span> }
+                                    else { <span class="badge text-bg-primary">Unpaid</span> }
+                                </td>
+                                <td class="text-end fw-semibold text-nowrap">₦@item.Amount.ToString("N2")</td>
+                                <td class="text-end">
+                                    @if (item.HasEvidence)
+                                    {
+                                        <a class="btn btn-outline-secondary btn-sm" asp-action="Evidence" asp-route-id="@item.Id">Proof</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const period = document.getElementById('period');
+            const customFields = document.querySelectorAll('.custom-date-field');
+            const updateCustomFields = () => {
+                const show = period.value === 'custom';
+                customFields.forEach(field => field.classList.toggle('d-none', !show));
+            };
+            period.addEventListener('change', updateCustomFields);
+            updateCustomFields();
+        })();
+    </script>
+}

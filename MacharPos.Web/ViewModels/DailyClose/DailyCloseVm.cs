@@ -4,10 +4,11 @@ namespace MacharPos.Web.ViewModels.DailyClose;
 
 public class DailyCloseVm
 {
+    public Guid StationId { get; set; }
     public string StationName { get; set; } = "";
     public DateTime CloseDate { get; set; } // date-only
 
-    public MacharPos.Core.Entities.DailyClose Existing { get; set; }
+    public MacharPos.Core.Entities.DailyClose? Existing { get; set; }
 
     // Live (recomputed) values for preview
     public decimal LiveTotalSales { get; set; }

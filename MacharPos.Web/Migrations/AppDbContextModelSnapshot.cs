@@ -22,6 +22,42 @@ namespace MacharPos.Web.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MacharPos.Core.Entities.CashMovement", b =>
+                {
+                    b.HasOne("MacharPos.Core.Entities.Station", "CounterpartyStation")
+                        .WithMany()
+                        .HasForeignKey("CounterpartyStationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MacharPos.Core.Entities.CashMovement", "ReversesMovement")
+                        .WithMany()
+                        .HasForeignKey("ReversesMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MacharPos.Core.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CounterpartyStation");
+
+                    b.Navigation("ReversesMovement");
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.CashReconciliation", b =>
+                {
+                    b.HasOne("MacharPos.Core.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Station");
+                });
+
             modelBuilder.Entity("MacharPos.Core.Entities.CreditPayment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -104,6 +140,157 @@ namespace MacharPos.Web.Migrations
                     b.HasIndex("StationId");
 
                     b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.CashMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("CounterpartyStationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("EnteredByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<decimal>("MainCashImpact")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("PettyCashImpact")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("ReversesMovementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TransferGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CounterpartyStationId");
+
+                    b.HasIndex("ReversesMovementId")
+                        .IsUnique();
+
+                    b.HasIndex("TransferGroupId");
+
+                    b.HasIndex("StationId", "OccurredAtUtc");
+
+                    b.ToTable("CashMovements");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.CashReconciliation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ActualMainCash")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ActualPettyCash")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("CashCreditCollections")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("CashSales")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClosedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<decimal>("ExpectedMainCash")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ExpectedPettyCash")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("MainCashVariance")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ManualMainCashNet")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ManualPettyCashNet")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal>("OpeningMainCash")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("OpeningPettyCash")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("PaidMainCashExpenses")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("PaidPettyCashExpenses")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("PettyCashVariance")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("ReconciliationDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ReopenReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ReopenedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReopenedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StationId", "ReconciliationDate")
+                        .IsUnique();
+
+                    b.ToTable("CashReconciliations");
                 });
 
             modelBuilder.Entity("MacharPos.Core.Entities.DailyClose", b =>
@@ -202,6 +389,124 @@ namespace MacharPos.Web.Migrations
                         .IsUnique();
 
                     b.ToTable("DailyCloses");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.ExpenseRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EvidenceContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<byte[]>("EvidenceData")
+                        .HasColumnType("bytea");
+
+                    b.Property<long?>("EvidenceFileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EvidenceOriginalFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("ExpenseDateTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PaidByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("Payee")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("PaymentCancelledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PaymentCancelledByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("PaymentEvidenceContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<byte[]>("PaymentEvidenceData")
+                        .HasColumnType("bytea");
+
+                    b.Property<long?>("PaymentEvidenceFileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("PaymentEvidenceOriginalFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int?>("PaymentMethod")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymentNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("RequestedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedByUserId", "CreatedAtUtc");
+
+                    b.HasIndex("StationId", "ExpenseDateTimeUtc");
+
+                    b.HasIndex("PaymentStatus", "PaidAtUtc");
+
+                    b.HasIndex("Status", "CreatedAtUtc");
+
+                    b.ToTable("ExpenseRequests");
                 });
 
             modelBuilder.Entity("MacharPos.Core.Entities.LoyaltyTransaction", b =>
@@ -847,6 +1152,17 @@ namespace MacharPos.Web.Migrations
                         .WithMany()
                         .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("MacharPos.Core.Entities.ExpenseRequest", b =>
+                {
+                    b.HasOne("MacharPos.Core.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Station");

@@ -1,0 +1,121 @@
+@using MacharPos.Core.Entities
+@model MacharPos.Web.ViewModels.Finance.CashbookVm
+
+@{
+    ViewData["Title"] = "Cashbook";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="h4 mb-1">Station Cashbook</h1>
+        <div class="text-secondary">Automatic cash sales, collections and paid expenses, plus controlled manual movements.</div>
+    </div>
+    <a class="btn btn-danger" asp-controller="CashReconciliation" asp-action="Index"
+       asp-route-stationId="@Model.Filter.StationId">Daily reconciliation</a>
+</div>
+
+@if (TempData["Ok"] is not null) { <div class="alert alert-success">@TempData["Ok"]</div> }
+@if (TempData["Err"] is not null) { <div class="alert alert-danger">@TempData["Err"]</div> }
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-12 col-md-2">
+                <label class="form-label">Period</label>
+                <select name="period" id="period" class="form-select">
+                    <option value="daily" selected="@(Model.Filter.Period == "daily")">Daily</option>
+                    <option value="weekly" selected="@(Model.Filter.Period == "weekly")">Weekly</option>
+                    <option value="monthly" selected="@(Model.Filter.Period == "monthly")">Monthly</option>
+                    <option value="yearly" selected="@(Model.Filter.Period == "yearly")">Yearly</option>
+                    <option value="custom" selected="@(Model.Filter.Period == "custom")">Custom</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2 custom-date-field">
+                <label class="form-label">Start</label>
+                <input type="date" name="startDate" class="form-control" value="@Model.Filter.StartDate?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-6 col-md-2 custom-date-field">
+                <label class="form-label">End</label>
+                <input type="date" name="endDate" class="form-control" value="@Model.Filter.EndDate?.ToString("yyyy-MM-dd")" />
+            </div>
+            @if (Model.IsAdmin)
+            {
+                <div class="col-12 col-md-3">
+                    <label class="form-label">Station</label>
+                    <select name="stationId" class="form-select">
+                        <option value="">All stations</option>
+                        @foreach (var station in Model.Stations)
+                        {
+                            <option value="@station.Id" selected="@(Model.Filter.StationId == station.Id)">@station.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="col-12 col-md-3"><button class="btn btn-outline-dark w-100">Apply filters</button></div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3"><div class="card shadow-sm h-100 border-success"><div class="card-body"><div class="small text-secondary">Main cash in</div><div class="h5 mb-0">₦@Model.MainCashIn.ToString("N2")</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card shadow-sm h-100 border-danger"><div class="card-body"><div class="small text-secondary">Main cash out</div><div class="h5 mb-0">₦@Model.MainCashOut.ToString("N2")</div><div class="small">Net ₦@Model.MainCashNet.ToString("N2")</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card shadow-sm h-100 border-success"><div class="card-body"><div class="small text-secondary">Petty cash in</div><div class="h5 mb-0">₦@Model.PettyCashIn.ToString("N2")</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card shadow-sm h-100 border-danger"><div class="card-body"><div class="small text-secondary">Petty cash out</div><div class="h5 mb-0">₦@Model.PettyCashOut.ToString("N2")</div><div class="small">Net ₦@Model.PettyCashNet.ToString("N2")</div></div></div></div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header bg-white py-3"><div class="fw-semibold">Record manual cash movement</div><div class="small text-secondary">Sales, credit collections and paid expenses are added automatically. Corrections are made through reversals.</div></div>
+    <div class="card-body">
+        <form asp-action="AddMovement" method="post" class="row g-2 align-items-end">
+            @Html.AntiForgeryToken()
+            @if (Model.IsAdmin)
+            {
+                <div class="col-12 col-md-3"><label class="form-label">Station</label><select name="StationId" class="form-select" required><option value="">Choose station</option>@foreach (var station in Model.Stations) { <option value="@station.Id" selected="@(Model.NewMovement.StationId == station.Id)">@station.Name</option> }</select></div>
+            }
+            else { <input type="hidden" name="StationId" value="@Model.Filter.StationId" /> }
+            <div class="col-12 col-md-3"><label class="form-label">Date and time</label><input type="datetime-local" name="OccurredAtLocal" class="form-control" value="@Model.NewMovement.OccurredAtLocal.ToString("yyyy-MM-ddTHH:mm")" required /></div>
+            <div class="col-12 col-md-3"><label class="form-label">Movement type</label><select name="Type" id="movement-type" class="form-select" required>
+                <option value="BankDeposit">Bank deposit</option><option value="PettyCashTopUp">Petty-cash top-up</option>
+                @if (Model.IsAdmin) { <option value="StationTransferOut">Station transfer</option> }
+                <option value="OtherCashIn">Other cash in</option><option value="OtherCashOut">Other cash out</option>
+            </select></div>
+            <div class="col-6 col-md-3"><label class="form-label">Amount</label><input type="number" name="Amount" min="0.01" step="0.01" class="form-control" required /></div>
+            <div class="col-6 col-md-3" id="account-field"><label class="form-label">Cash account</label><select name="Account" class="form-select"><option value="MainCash">Main cash</option><option value="PettyCash">Petty cash</option></select></div>
+            @if (Model.IsAdmin)
+            {
+                <div class="col-12 col-md-3 d-none" id="destination-field"><label class="form-label">Destination station</label><select name="DestinationStationId" class="form-select"><option value="">Choose station</option>@foreach (var station in Model.Stations) { <option value="@station.Id">@station.Name</option> }</select></div>
+            }
+            <div class="col-12 col-md-4"><label class="form-label">Description</label><input name="Description" maxlength="500" class="form-control" required /></div>
+            <div class="col-12 col-md-2"><label class="form-label">Reference</label><input name="Reference" maxlength="200" class="form-control" /></div>
+            <div class="col-12 col-md-3"><button class="btn btn-danger w-100">Record movement</button></div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white py-3 d-flex justify-content-between"><div><div class="fw-semibold">@Model.PeriodLabel cashbook</div><div class="small text-secondary">@Model.RangeStartLocal.ToString("dd MMM yyyy") – @Model.RangeEndLocal.ToString("dd MMM yyyy")</div></div><span class="badge text-bg-light align-self-center">@Model.Entries.Count.ToString("N0") entries</span></div>
+    <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead class="table-light"><tr><th>Date / time</th><th>Station</th><th>Source / description</th><th>Reference / user</th><th class="text-end">Main cash</th><th class="text-end">Petty cash</th><th></th></tr></thead><tbody>
+        @if (Model.Entries.Count == 0) { <tr><td colspan="7" class="text-center text-secondary py-5">No cashbook entries match this period.</td></tr> }
+        @foreach (var item in Model.Entries)
+        {
+            <tr><td class="text-nowrap"><div class="fw-semibold">@item.OccurredAtLocal.ToString("dd MMM yyyy")</div><div class="small text-secondary">@item.OccurredAtLocal.ToString("HH:mm") WAT</div></td><td>@item.StationName</td><td><div class="fw-semibold">@item.Source</div><div class="small text-secondary">@item.Description</div></td><td><div>@(item.Reference ?? "—")</div><div class="small text-secondary">@item.EnteredBy</div></td>
+                <td class="text-end text-nowrap @(item.MainCashImpact < 0 ? "text-danger" : item.MainCashImpact > 0 ? "text-success" : "text-secondary")">@(item.MainCashImpact == 0 ? "—" : $"{(item.MainCashImpact > 0 ? "+" : "")}₦{item.MainCashImpact:N2}")</td>
+                <td class="text-end text-nowrap @(item.PettyCashImpact < 0 ? "text-danger" : item.PettyCashImpact > 0 ? "text-success" : "text-secondary")">@(item.PettyCashImpact == 0 ? "—" : $"{(item.PettyCashImpact > 0 ? "+" : "")}₦{item.PettyCashImpact:N2}")</td>
+                <td>@if (item.CanReverse) { <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#reverseModal" data-id="@item.ManualMovementId">Reverse</button> }</td></tr>
+        }
+    </tbody></table></div></div>
+</div>
+
+<div class="modal fade" id="reverseModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><form asp-action="Reverse" method="post">@Html.AntiForgeryToken()<div class="modal-header"><h2 class="modal-title fs-5">Reverse cash movement</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" name="id" id="reverse-id" /><input type="hidden" name="stationId" value="@Model.Filter.StationId" /><label class="form-label">Reason</label><textarea name="reason" minlength="3" maxlength="500" class="form-control" required></textarea><div class="small text-secondary mt-2">The original entry remains in the audit trail and an equal opposite entry is created.</div></div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-danger">Create reversal</button></div></form></div></div></div>
+
+@section Scripts {
+<script>
+(() => {
+  const period = document.getElementById('period'); const dates = document.querySelectorAll('.custom-date-field');
+  const updateDates = () => dates.forEach(x => x.classList.toggle('d-none', period.value !== 'custom')); period.addEventListener('change', updateDates); updateDates();
+  const type = document.getElementById('movement-type'); const account = document.getElementById('account-field'); const destination = document.getElementById('destination-field');
+  const updateMovement = () => { account.classList.toggle('d-none', !['OtherCashIn','OtherCashOut'].includes(type.value)); if (destination) destination.classList.toggle('d-none', type.value !== 'StationTransferOut'); }; type.addEventListener('change', updateMovement); updateMovement();
+  document.getElementById('reverseModal').addEventListener('show.bs.modal', event => document.getElementById('reverse-id').value = event.relatedTarget.dataset.id);
+})();
+</script>
+}

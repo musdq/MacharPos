@@ -1,0 +1,272 @@
+@using MacharPos.Core.Entities
+@using MacharPos.Web.Services.Expenses
+@model MacharPos.Web.ViewModels.Expenses.ExpenseManagementVm
+
+@{
+    ViewData["Title"] = "Expense Management";
+}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+        <h1 class="h4 mb-1">Expense Management</h1>
+        <div class="text-secondary">Review expense requests across all stations.</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-dark" asp-action="RequestExpense">New request</a>
+        <a class="btn btn-danger" asp-action="Report">Expense reports</a>
+    </div>
+</div>
+
+@if (TempData["Ok"] is not null)
+{
+    <div class="alert alert-success">@TempData["Ok"]</div>
+}
+@if (TempData["Err"] is not null)
+{
+    <div class="alert alert-danger">@TempData["Err"]</div>
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-xl">
+        <div class="card shadow-sm expense-summary-card h-100 border-warning">
+            <div class="card-body">
+                <div class="text-secondary small">Pending requests</div>
+                <div class="h4 mb-0">@Model.PendingCount.ToString("N0")</div>
+                <div class="small fw-semibold">₦@Model.PendingAmount.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card shadow-sm expense-summary-card h-100 border-success">
+            <div class="card-body">
+                <div class="text-secondary small">Approved</div>
+                <div class="h4 mb-0">@Model.ApprovedCount.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card shadow-sm expense-summary-card h-100 border-danger">
+            <div class="card-body">
+                <div class="text-secondary small">Rejected</div>
+                <div class="h4 mb-0">@Model.RejectedCount.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card shadow-sm expense-summary-card h-100 border-primary">
+            <div class="card-body">
+                <div class="text-secondary small">Approved, unpaid</div>
+                <div class="h4 mb-0">@Model.ApprovedUnpaidCount.ToString("N0")</div>
+                <div class="small fw-semibold">₦@Model.ApprovedUnpaidAmount.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl">
+        <div class="card shadow-sm expense-summary-card h-100 border-dark">
+            <div class="card-body">
+                <div class="text-secondary small">Paid expenses</div>
+                <div class="h4 mb-0">@Model.PaidCount.ToString("N0")</div>
+                <div class="small fw-semibold">₦@Model.PaidAmount.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="" selected="@(!Model.StatusFilter.HasValue)">All statuses</option>
+                    <option value="Pending" selected="@(Model.StatusFilter == ExpenseStatus.Pending)">Pending</option>
+                    <option value="Approved" selected="@(Model.StatusFilter == ExpenseStatus.Approved)">Approved</option>
+                    <option value="Rejected" selected="@(Model.StatusFilter == ExpenseStatus.Rejected)">Rejected</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-5">
+                <label class="form-label">Station</label>
+                <select name="stationId" class="form-select">
+                    <option value="">All stations</option>
+                    @foreach (var station in Model.Stations)
+                    {
+                        <option value="@station.Id" selected="@(Model.StationId == station.Id)">@station.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <button class="btn btn-outline-dark w-100">Apply filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 expense-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Expense date</th>
+                        <th>Station / requester</th>
+                        <th>Category / reason</th>
+                        <th>Status</th>
+                        <th class="text-end">Amount</th>
+                        <th style="min-width: 300px;">Review / payment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Items.Count == 0)
+                    {
+                        <tr><td colspan="6" class="text-center text-secondary py-5">No expense requests match these filters.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td class="text-nowrap">
+                                    <div class="fw-semibold">@item.ExpenseDateTimeLocal.ToString("dd MMM yyyy")</div>
+                                    <div class="text-secondary small">@item.ExpenseDateTimeLocal.ToString("HH:mm") WAT</div>
+                                    <div class="text-secondary small mt-1">Submitted @item.CreatedAtLocal.ToString("dd MMM, HH:mm")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@item.StationName</div>
+                                    <div class="text-secondary small">@item.RequesterName</div>
+                                    @if (item.HasEvidence)
+                                    {
+                                        <a class="small" asp-action="Evidence" asp-route-id="@item.Id">Download proof</a>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@ExpenseReporting.CategoryName(item.Category)</div>
+                                    <div class="text-secondary small expense-reason">@item.Reason</div>
+                                </td>
+                                <td>
+                                    @if (item.Status == ExpenseStatus.Approved)
+                                    {
+                                        <span class="badge text-bg-success">Approved</span>
+                                    }
+                                    else if (item.Status == ExpenseStatus.Rejected)
+                                    {
+                                        <span class="badge text-bg-danger">Rejected</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-warning">Pending</span>
+                                    }
+                                    @if (item.Status == ExpenseStatus.Approved)
+                                    {
+                                        if (item.PaymentStatus == ExpensePaymentStatus.Paid)
+                                        {
+                                            <span class="badge text-bg-dark">Paid</span>
+                                        }
+                                        else if (item.PaymentStatus == ExpensePaymentStatus.Cancelled)
+                                        {
+                                            <span class="badge text-bg-secondary">Payment cancelled</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge text-bg-primary">Unpaid</span>
+                                        }
+                                    }
+                                </td>
+                                <td class="text-end fw-semibold text-nowrap">₦@item.Amount.ToString("N2")</td>
+                                <td>
+                                    @if (item.Status == ExpenseStatus.Pending)
+                                    {
+                                        <form method="post">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@item.Id" />
+                                            <input type="hidden" name="returnStatus" value="@Model.StatusFilter" />
+                                            <input type="hidden" name="returnStationId" value="@Model.StationId" />
+                                            <input type="hidden" name="returnPage" value="@Model.Page" />
+                                            <textarea name="reviewNote" rows="2" maxlength="500" class="form-control form-control-sm mb-2"
+                                                      placeholder="Optional admin note"></textarea>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" formaction="@Url.Action("Approve")"
+                                                        class="btn btn-success btn-sm flex-fill"
+                                                        onclick="return confirm('Approve this expense request?');">Approve</button>
+                                                <button type="submit" formaction="@Url.Action("Reject")"
+                                                        class="btn btn-outline-danger btn-sm flex-fill"
+                                                        onclick="return confirm('Reject this expense request?');">Reject</button>
+                                            </div>
+                                        </form>
+                                    }
+                                    else if (item.Status != ExpenseStatus.Approved || item.PaymentStatus != ExpensePaymentStatus.Unpaid)
+                                    {
+                                        <div class="small text-secondary">
+                                            Reviewed by @(item.ReviewerName ?? "Admin")<br />
+                                            @(item.ReviewedAtLocal?.ToString("dd MMM yyyy, HH:mm") ?? "-")
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(item.ReviewNote))
+                                        {
+                                            <div class="small mt-1"><span class="fw-semibold">Note:</span> @item.ReviewNote</div>
+                                        }
+                                    }
+
+                                    @if (item.Status == ExpenseStatus.Approved && item.PaymentStatus == ExpensePaymentStatus.Unpaid)
+                                    {
+                                        <div class="small text-secondary mb-2">Approved by @(item.ReviewerName ?? "Admin")</div>
+                                        <form asp-action="Pay" method="post" enctype="multipart/form-data" class="border rounded p-2 mb-2">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="Id" value="@item.Id" />
+                                            <input type="hidden" name="ReturnStatus" value="@Model.StatusFilter" />
+                                            <input type="hidden" name="ReturnStationId" value="@Model.StationId" />
+                                            <input type="hidden" name="ReturnPage" value="@Model.Page" />
+                                            <div class="row g-2">
+                                                <div class="col-6"><select name="PaymentMethod" class="form-select form-select-sm" required><option value="Cash">Cash</option><option value="PettyCash">Petty cash</option><option value="POS">POS</option><option value="BankTransfer">Bank transfer</option></select></div>
+                                                <div class="col-6"><input name="Payee" maxlength="200" class="form-control form-control-sm" placeholder="Payee / recipient" required /></div>
+                                                <div class="col-12"><input type="file" name="PaymentEvidence" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp,application/pdf" /></div>
+                                                <div class="col-12"><input name="PaymentNote" maxlength="500" class="form-control form-control-sm" placeholder="Optional payment note" /></div>
+                                                <div class="col-12 small text-secondary">The payment reference will be generated automatically.</div>
+                                                <div class="col-12"><button class="btn btn-danger btn-sm w-100" onclick="return confirm('Confirm that this expense has been paid?');">Mark paid</button></div>
+                                            </div>
+                                        </form>
+                                        <form asp-action="CancelPayment" method="post" class="d-flex gap-1">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@item.Id" />
+                                            <input type="hidden" name="returnStatus" value="@Model.StatusFilter" />
+                                            <input type="hidden" name="returnStationId" value="@Model.StationId" />
+                                            <input type="hidden" name="returnPage" value="@Model.Page" />
+                                            <input name="reason" minlength="3" maxlength="500" class="form-control form-control-sm" placeholder="Cancellation reason" required />
+                                            <button class="btn btn-outline-secondary btn-sm" onclick="return confirm('Cancel payment of this approved expense?');">Cancel</button>
+                                        </form>
+                                    }
+                                    else if (item.Status == ExpenseStatus.Approved && item.PaymentStatus == ExpensePaymentStatus.Paid)
+                                    {
+                                        <div class="small mt-2"><strong>Paid:</strong> @(item.PaidAtLocal?.ToString("dd MMM yyyy, HH:mm") ?? "—") WAT</div>
+                                        <div class="small"><strong>Method:</strong> @item.PaymentMethod · <strong>Payee:</strong> @item.Payee</div>
+                                        @if (!string.IsNullOrWhiteSpace(item.PaymentReference)) { <div class="small"><strong>Reference:</strong> @item.PaymentReference</div> }
+                                        @if (item.HasPaymentEvidence) { <a class="small" asp-action="PaymentEvidence" asp-route-id="@item.Id">Download payment proof</a> }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        <div class="card-footer bg-white">
+            <nav aria-label="Expense request pages">
+                <ul class="pagination pagination-sm justify-content-end mb-0">
+                    <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                        <a class="page-link" asp-action="Manage"
+                           asp-route-status="@Model.StatusFilter" asp-route-stationId="@Model.StationId"
+                           asp-route-page="@(Model.Page - 1)" asp-route-pageSize="@Model.PageSize">Previous</a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link">Page @Model.Page of @Model.TotalPages</span></li>
+                    <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                        <a class="page-link" asp-action="Manage"
+                           asp-route-status="@Model.StatusFilter" asp-route-stationId="@Model.StationId"
+                           asp-route-page="@(Model.Page + 1)" asp-route-pageSize="@Model.PageSize">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
+</div>

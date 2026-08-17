@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Identity
+﻿@using Microsoft.AspNetCore.Identity
 @inject SignInManager<MacharPos.Web.Auth.ApplicationUser> SignInManager
 @{
     var isSignedIn = SignInManager.IsSignedIn(User);
@@ -29,10 +29,12 @@
 
                     <div class="collapse navbar-collapse" id="mainNav">
                         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                            <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a>></li>
                             <li class="nav-item"><a class="nav-link" asp-controller="Sales" asp-action="New">New Sale</a></li>
                             <li class="nav-item"><a class="nav-link" asp-controller="Sales" asp-action="Index">Sales</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Expenses" asp-action="RequestExpense">Expense Request</a></li>
 
+                          
                             @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
                             {
                                 <li class="nav-item"><a class="nav-link" asp-controller="Products" asp-action="Index">Products</a></li>
@@ -41,7 +43,11 @@
                                 <li class="nav-item"><a class="nav-link" asp-controller="Batches" asp-action="Index">Batches</a></li>
                                 <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="New">New Credit Sale</a></li>
                                 <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="Index">Credit Sales</a></li>
+                                @*     <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="Aging">Credit Aging</a></li> *@
                                 <li class="nav-item"><a class="nav-link" asp-controller="DailyClose" asp-action="Index">Daily Close</a></li>
+                                <li class="nav-item"><a class="nav-link" asp-controller="Cashbook" asp-action="Index">Cashbook</a></li>
+                                <li class="nav-item"><a class="nav-link" asp-controller="CashReconciliation" asp-action="Index">Cash Reconciliation</a></li>
+                                @*     <li class="nav-item"><a class="nav-link" asp-controller="ShiftClose" asp-action="Index">Shift Close</a></li> *@
                             }
 
                             @if (User.IsInRole("Admin"))
@@ -49,7 +55,11 @@
                                 <li class="nav-item"><a class="nav-link" asp-controller="Stations" asp-action="Index">Stations</a></li>
                                 <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Index">Admin</a></li>
                                 <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="HQIndex">HQ Dashboard</a></li>
+                                <li class="nav-item"><a class="nav-link" asp-controller="Expenses" asp-action="Manage">Manage Expenses</a></li>
+                                <li class="nav-item"><a class="nav-link" asp-controller="Expenses" asp-action="Report">Expense Reports</a></li>
                             }
+
+                            
                         </ul>
 
                         <div class="d-flex gap-2 align-items-center">
@@ -110,11 +120,11 @@
                         <a asp-controller="Home" asp-action="Directors">Directors</a>
                         <a asp-controller="Home" asp-action="Contact">Contact</a>
                     </div>
-                 @*    <div class="col-lg-4">
+                    <div class="col-lg-4">
                         <h5>Staff Portal</h5>
                         <p>Authorized staff can access MacharPOS through the secure staff login.</p>
                         <a class="btn btn-outline-light btn-sm" asp-controller="Account" asp-action="Login">Staff Login</a>
-                    </div> *@
+                    </div>
                 </div>
                 <div class="footer-bottom">© @DateTime.Now.Year Machar Oil and Gas Ltd. All rights reserved.</div>
             </div>

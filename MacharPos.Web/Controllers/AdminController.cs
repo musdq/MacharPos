@@ -205,6 +205,9 @@ public class AdminController : Controller
 
         try
         {
+            await _db.CashReconciliations.ExecuteDeleteAsync();
+            await _db.CashMovements.ExecuteDeleteAsync();
+            await _db.ExpenseRequests.ExecuteDeleteAsync();
             await _db.SaleItems.ExecuteDeleteAsync();
             await _db.CreditPayments.ExecuteDeleteAsync();
             await _db.DailyCloses.ExecuteDeleteAsync();

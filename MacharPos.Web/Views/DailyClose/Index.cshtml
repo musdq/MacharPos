@@ -1,4 +1,9 @@
 @model MacharPos.Web.ViewModels.DailyClose.DailyCloseVm
+
+<div class="d-flex justify-content-end gap-2 mb-3 no-print">
+    <a class="btn btn-outline-dark btn-sm" asp-controller="Cashbook" asp-action="Index" asp-route-period="daily" asp-route-startDate="@Model.CloseDate.ToString("yyyy-MM-dd")" asp-route-endDate="@Model.CloseDate.ToString("yyyy-MM-dd")" asp-route-stationId="@Model.StationId">Cashbook</a>
+    <a class="btn btn-danger btn-sm" asp-controller="CashReconciliation" asp-action="Index" asp-route-date="@Model.CloseDate.ToString("yyyy-MM-dd")" asp-route-stationId="@Model.StationId">Cash reconciliation</a>
+</div>
 @{
     ViewData["Title"] = "Daily Close";
     var isClosed = Model.Existing?.IsClosed ?? false;

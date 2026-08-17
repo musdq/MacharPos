@@ -45,6 +45,13 @@ public static class BusinessTime
         return TimeZoneInfo.ConvertTimeToUtc(dt, WAT);
     }
 
+    /// <summary>Converts a stored UTC timestamp to Nigeria local time.</summary>
+    public static DateTime ToLocal(DateTime utcDateTime)
+    {
+        var utc = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeFromUtc(utc, WAT);
+    }
+
     /// <summary>
     /// Converts a Nigeria local date (date-only) into UTC range [start, end).
     /// </summary>
@@ -72,7 +79,7 @@ public static class BusinessTime
         var (utcStart, _) = UtcRangeForLocalDate(start);
 
         // end exclusive is the start of the next local day after endInc
-        var (_, utcEndExclusive) = UtcRangeForLocalDate(endInc.AddDays(1));
+        var (utcEndExclusive, _) = UtcRangeForLocalDate(endInc.AddDays(1));
 
         return (utcStart, utcEndExclusive);
     }

@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
 using System.Text.Json;
+using MacharPos.Web.Utils;
 
 namespace MacharPos.Web.Controllers;
 
@@ -357,48 +358,81 @@ public class SalesController : Controller
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
 
-        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+        // Nigeria business date, regardless of hosting server location.
+        var todayLocal = BusinessTime.TodayLocalDate();
+        var todayDateOnly = AsDateOnly(todayLocal);
+        var yesterdayDateOnly = AsDateOnly(todayLocal.AddDays(-1));
+
+        var guard = await GuardClosedDayAsync(stationId, todayLocal);
+
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
-            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+
+            return RedirectToAction(
+                "Index",
+                "DailyClose",
+                new
+                {
+                    date = todayDateOnly.ToString("yyyy-MM-dd")
+                });
         }
 
-        var yesterdayDateOnly = AsDateOnly(DateTime.Today.AddDays(-1));
+        // Correct UTC boundary for midnight in Nigeria.
+        var (todayUtcStart, _) =
+            BusinessTime.UtcRangeForLocalDate(todayLocal);
 
-        var hasPriorActivity = await _db.Sales.AsNoTracking()
-            .AnyAsync(s => s.StationId == stationId && s.CreatedAt < DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
+        var hasPriorActivity = await _db.Sales
+            .AsNoTracking()
+            .AnyAsync(s =>
+                s.StationId == stationId &&
+                s.CreatedAt < todayUtcStart);
 
         if (hasPriorActivity)
         {
-            var yesterdayClosed = await _db.DailyCloses.AsNoTracking()
-                .AnyAsync(x => x.StationId == stationId && x.CloseDate == yesterdayDateOnly && x.IsClosed);
+            var yesterdayClosed = await _db.DailyCloses
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    x.StationId == stationId &&
+                    x.CloseDate == yesterdayDateOnly &&
+                    x.IsClosed);
 
             if (!yesterdayClosed)
             {
-                ViewBag.UnclosedDate = yesterdayDateOnly.ToString("yyyy-MM-dd");
-                ViewBag.UnclosedDateDisplay = yesterdayDateOnly.ToString("ddd, dd MMM yyyy");
+                ViewBag.UnclosedDate =
+                    yesterdayDateOnly.ToString("yyyy-MM-dd");
+
+                ViewBag.UnclosedDateDisplay =
+                    yesterdayDateOnly.ToString("ddd, dd MMM yyyy");
             }
         }
 
-        var customers = await _db.Customers.AsNoTracking()
+        var customers = await _db.Customers
+            .AsNoTracking()
             .Where(c => c.StationId == stationId && c.IsActive)
             .OrderBy(c => c.Name)
             .ToListAsync();
 
         var walkin = customers.FirstOrDefault(c => c.Name == "Walk-in");
 
-        var products = await _db.Products.AsNoTracking()
-                          .Where(p => p.IsActive)
-                          .OrderBy(p => p.Name)
-                          .ToListAsync();
+        var products = await _db.Products
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.Name)
+            .ToListAsync();
 
-        ViewBag.ProductPrices = products.ToDictionary(p => p.Id.ToString(), p => p.DefaultUnitPrice);
-        ViewBag.ProductEquivalentKgs = products.ToDictionary(p => p.Id.ToString(), p => p.EquivalentKg ?? 0m);
+        ViewBag.ProductPrices = products.ToDictionary(
+            p => p.Id.ToString(),
+            p => p.DefaultUnitPrice);
+
+        ViewBag.ProductEquivalentKgs = products.ToDictionary(
+            p => p.Id.ToString(),
+            p => p.EquivalentKg ?? 0m);
 
         var vm = new SaleCreateVm
         {
             CustomerId = walkin?.Id,
+
             Customers = customers.Select(c => new SelectListItem(
                 c.Name == "Walk-in"
                     ? "Walk-in"
@@ -407,11 +441,25 @@ public class SalesController : Controller
                         : $"{c.Name} — {c.Phone}",
                 c.Id.ToString(),
                 c.Id == walkin?.Id)).ToList(),
-            Products = products.Select(p => new SelectListItem(p.Name, p.Id.ToString())).ToList(),
-            PaymentMethods = Enum.GetValues<PaymentMethod>().Where(pm => pm != PaymentMethod.Credit)
-                .Select(pm => new SelectListItem(pm.ToString(), ((int)pm).ToString(), pm == PaymentMethod.Cash))
+
+            Products = products
+                .Select(p => new SelectListItem(
+                    p.Name,
+                    p.Id.ToString()))
                 .ToList(),
-            Lines = new List<SaleLineVm> { new SaleLineVm() }
+
+            PaymentMethods = Enum.GetValues<PaymentMethod>()
+                .Where(pm => pm != PaymentMethod.Credit)
+                .Select(pm => new SelectListItem(
+                    pm.ToString(),
+                    ((int)pm).ToString(),
+                    pm == PaymentMethod.Cash))
+                .ToList(),
+
+            Lines = new List<SaleLineVm>
+        {
+            new SaleLineVm()
+        }
         };
 
         await PopulateLoyaltyStateAsync(vm, stationId, null, null);

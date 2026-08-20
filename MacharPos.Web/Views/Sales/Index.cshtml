@@ -1,5 +1,5 @@
 @model List<MacharPos.Core.Entities.Sale>
-
+@using MacharPos.Web.Utils
 @{
     ViewData["Title"] = "Sales";
     var stationName = (string)ViewBag.StationName;
@@ -124,7 +124,7 @@
                           
                             <tr>
                                 <td>@index</td>
-                                <td>@s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@BusinessTime.ToLocal(s.CreatedAt).ToString("yyyy-MM-dd HH:mm")</td>
                                 <td class="fw-semibold">@s.ReceiptNo</td>
                                 <td>@(s.Customer?.Name ?? "Walk-in")</td>
                                 <td>@s.PaymentMethod</td>

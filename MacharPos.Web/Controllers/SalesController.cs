@@ -599,13 +599,13 @@ public class SalesController : Controller
                 }).ToList()
             };
 
-            _db.SyncQueue.Add(new SyncQueueItem
-            {
-                EntityType = "Sale",
-                EntityId = sale.Id,
-                PayloadJson = JsonSerializer.Serialize(dto),
-                Synced = false
-            });
+            //_db.SyncQueue.Add(new SyncQueueItem
+            //{
+            //    EntityType = "Sale",
+            //    EntityId = sale.Id,
+            //    PayloadJson = JsonSerializer.Serialize(dto),
+            //    Synced = false
+            //});
 
             await _db.SaveChangesAsync();
 

@@ -117,23 +117,35 @@
 <script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
 
 <script>
-qz.security.setCertificatePromise(function(resolve, reject) {
-    fetch("/qz/digital-certificate.txt")
-        .then(res => res.text())
-        .then(resolve)
-        .catch(reject);
-});
+    qz.security.setCertificatePromise(async function() {
+        const response = await fetch("/qz/digital-certificate.txt", {
+            cache: "no-store"
+        });
 
-qz.security.setSignatureAlgorithm("SHA512");
+        if (!response.ok) {
+            throw new Error(`Certificate request failed: ${response.status}`);
+        }
 
-qz.security.setSignaturePromise(function(toSign) {
-    return function(resolve, reject) {
-        fetch("/qz/sign?request=" + encodeURIComponent(toSign))
-            .then(res => res.text())
-            .then(resolve)
-            .catch(reject);
-    };
-});
+        return await response.text();
+    });
+
+    qz.security.setSignatureAlgorithm("SHA512");
+
+    qz.security.setSignaturePromise(async function(toSign) {
+        const response = await fetch("/qz/sign", {
+            method: "POST",
+            headers: {
+                "Content-Type": "text/plain;charset=UTF-8"
+            },
+            body: toSign
+        });
+
+        if (!response.ok) {
+            throw new Error(`QZ signing failed: ${response.status}`);
+        }
+
+        return await response.text();
+    });
 </script>
 
 <script>

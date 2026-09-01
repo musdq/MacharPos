@@ -56,8 +56,11 @@ public class SalesController : Controller
 
         var dateOnly = AsDateOnly(businessDate);
 
-        var isClosed = await _db.DailyCloses.AsNoTracking()
-            .AnyAsync(x => x.StationId == stationId && x.CloseDate == dateOnly && x.IsClosed);
+        var isClosed = await _db.DailyCloses
+            .AsNoTracking()
+            .AnyAsync(x => x.StationId == stationId 
+            && x.CloseDate == dateOnly
+            && x.IsClosed);
 
         if (!isClosed) return (true, "");
 
@@ -288,7 +291,9 @@ public class SalesController : Controller
 
         if (sale is null) return NotFound();
 
-        var guard = await GuardClosedDayAsync(stationId, sale.CreatedAt);
+        var saleBusinessDate = BusinessTime.ToLocal(sale.CreatedAt);
+
+        var guard = await GuardClosedDayAsync(stationId, saleBusinessDate);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
@@ -360,7 +365,9 @@ public class SalesController : Controller
 
         // Nigeria business date, regardless of hosting server location.
         var todayLocal = BusinessTime.TodayLocalDate();
-        var todayDateOnly = AsDateOnly(todayLocal);
+        //var todayDateOnly = AsDateOnly(todayLocal);
+
+        ViewBag.currentTime = todayLocal;
         var yesterdayDateOnly = AsDateOnly(todayLocal.AddDays(-1));
 
         var guard = await GuardClosedDayAsync(stationId, todayLocal);
@@ -374,7 +381,7 @@ public class SalesController : Controller
                 "DailyClose",
                 new
                 {
-                    date = todayDateOnly.ToString("yyyy-MM-dd")
+                    date = todayLocal.ToString("yyyy-MM-dd")
                 });
         }
 
@@ -472,12 +479,14 @@ public class SalesController : Controller
     public async Task<IActionResult> New(SaleCreateVm vm)
     {
         var stationId = await _stationCtx.GetStationIdOrThrowAsync();
+        var todayLocal = BusinessTime.TodayLocalDate();
 
-        var guard = await GuardClosedDayAsync(stationId, DateTime.Today);
+
+        var guard = await GuardClosedDayAsync(stationId, todayLocal);
         if (!guard.Allowed)
         {
             TempData["Err"] = guard.Message;
-            return RedirectToAction("Index", "DailyClose", new { date = AsDateOnly(DateTime.Today).ToString("yyyy-MM-dd") });
+            return RedirectToAction("Index", "DailyClose", new { date = todayLocal.ToString("yyyy-MM-dd") });
         }
 
         var user = await _users.GetUserAsync(User);
@@ -819,23 +828,43 @@ public class SalesController : Controller
 
     private async Task<string> GenerateReceiptNoAsync(Guid stationId)
     {
-        var station = await _db.Stations.AsNoTracking().FirstAsync(s => s.Id == stationId);
+        var station = await _db.Stations
+            .AsNoTracking()
+            .FirstAsync(s => s.Id == stationId);
+
         var stationCode = MakeStationCode(station.Name);
 
-        var utcDayStart = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
-        var utcDayEnd = utcDayStart.AddDays(1);
+        var businessDate = BusinessTime.TodayLocalDate();
 
-        var stationKey = BitConverter.ToInt32(stationId.ToByteArray(), 0);
-        var dayKey = int.Parse(DateTime.UtcNow.ToString("yyyyMMdd"));
+        var (utcDayStart, utcDayEnd) =
+            BusinessTime.UtcRangeForLocalDate(businessDate);
 
-        await _db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock({0}, {1});", stationKey, dayKey);
+        var stationKey = BitConverter.ToInt32(
+            stationId.ToByteArray(),
+            0
+        );
 
-        var todayCount = await _db.Sales.AsNoTracking()
-            .Where(s => s.StationId == stationId && s.CreatedAt >= utcDayStart && s.CreatedAt < utcDayEnd)
-            .CountAsync();
+        var dayKey = int.Parse(
+            businessDate.ToString("yyyyMMdd")
+        );
 
-        var receiptSeq = todayCount + 1;
-        return $"{stationCode}-{utcDayStart:yyyyMMdd}-{receiptSeq:000000}";
+        await _db.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock({0}, {1});",
+            stationKey,
+            dayKey
+        );
+
+        var todayCount = await _db.Sales
+            .AsNoTracking()
+            .CountAsync(s =>
+                s.StationId == stationId &&
+                s.CreatedAt >= utcDayStart &&
+                s.CreatedAt < utcDayEnd
+            );
+
+        var receiptSequence = todayCount + 1;
+
+        return $"{stationCode}-{businessDate:yyyyMMdd}-{receiptSequence:000000}";
     }
 
     private Sale BuildSaleSkeleton(SaleCreateVm vm, Guid stationId, string soldByUserId, string receiptNo)

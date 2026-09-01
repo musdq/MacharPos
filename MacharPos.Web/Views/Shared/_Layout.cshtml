@@ -29,44 +29,119 @@
 
                     <div class="collapse navbar-collapse" id="mainNav">
                         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                            <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a>></li>
-                            <li class="nav-item"><a class="nav-link" asp-controller="Sales" asp-action="New">New Sale</a></li>
-                            <li class="nav-item"><a class="nav-link" asp-controller="Sales" asp-action="Index">Sales</a></li>
-                            <li class="nav-item"><a class="nav-link" asp-controller="Expenses" asp-action="RequestExpense">Expense Request</a></li>
+                            <li class="nav-item">
+                                <a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a>
+                            </li>
 
-                          
+                            @* Sales *@
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="navSalesDropdown"
+                                   role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Sales
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="navSalesDropdown">
+                                    <li><a class="dropdown-item" asp-controller="Sales" asp-action="New">New Sale</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Sales" asp-action="Index">Sales</a></li>
+                                </ul>
+                            </li>
+
+                            @* Credit *@
                             @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
                             {
-                                <li class="nav-item"><a class="nav-link" asp-controller="Products" asp-action="Index">Products</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="ProductCategories" asp-action="Index">Categories</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Customers" asp-action="Index">Customers</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Batches" asp-action="Index">Batches</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="New">New Credit Sale</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="Index">Credit Sales</a></li>
-                                @*     <li class="nav-item"><a class="nav-link" asp-controller="Credit" asp-action="Aging">Credit Aging</a></li> *@
-                                <li class="nav-item"><a class="nav-link" asp-controller="DailyClose" asp-action="Index">Daily Close</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Cashbook" asp-action="Index">Cashbook</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="CashReconciliation" asp-action="Index">Cash Reconciliation</a></li>
-                                @*     <li class="nav-item"><a class="nav-link" asp-controller="ShiftClose" asp-action="Index">Shift Close</a></li> *@
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" id="navCreditDropdown"
+                                       role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Credit
+                                    </a>
+                                    <ul class="dropdown-menu" aria-labelledby="navCreditDropdown">
+                                        <li><a class="dropdown-item" asp-controller="Credit" asp-action="New">New Credit Sale</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Credit" asp-action="Index">Credit Sales</a></li>
+                                        @* <li><a class="dropdown-item" asp-controller="Credit" asp-action="Aging">Credit Aging</a></li> *@
+                                    </ul>
+                                </li>
                             }
 
+                            @* Expenses: show a direct link when only one option is available. *@
                             @if (User.IsInRole("Admin"))
                             {
-                                <li class="nav-item"><a class="nav-link" asp-controller="Stations" asp-action="Index">Stations</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Admin" asp-action="Index">Admin</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="HQIndex">HQ Dashboard</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Expenses" asp-action="Manage">Manage Expenses</a></li>
-                                <li class="nav-item"><a class="nav-link" asp-controller="Expenses" asp-action="Report">Expense Reports</a></li>
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" id="navExpensesDropdown"
+                                       role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Expenses
+                                    </a>
+                                    <ul class="dropdown-menu" aria-labelledby="navExpensesDropdown">
+                                        <li><a class="dropdown-item" asp-controller="Expenses" asp-action="RequestExpense">Expense Request</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Expenses" asp-action="Manage">Manage Expenses</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Expenses" asp-action="Report">Expense Reports</a></li>
+                                    </ul>
+                                </li>
+                            }
+                            else
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Expenses" asp-action="RequestExpense">Expense Request</a>
+                                </li>
                             }
 
-                            
+                            @if (User.IsInRole("Admin") || User.IsInRole("StationManager"))
+                            {
+                                @* Inventory *@
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" id="navInventoryDropdown"
+                                       role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Inventory
+                                    </a>
+                                    <ul class="dropdown-menu" aria-labelledby="navInventoryDropdown">
+                                        <li><a class="dropdown-item" asp-controller="Products" asp-action="Index">Products</a></li>
+                                        <li><a class="dropdown-item" asp-controller="ProductCategories" asp-action="Index">Categories</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Batches" asp-action="Index">Batches</a></li>
+                                    </ul>
+                                </li>
+
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="Customers" asp-action="Index">Customers</a>
+                                </li>
+
+                                @* Cash Management *@
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" id="navCashDropdown"
+                                       role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Cash Management
+                                    </a>
+                                    <ul class="dropdown-menu" aria-labelledby="navCashDropdown">
+                                        <li><a class="dropdown-item" asp-controller="Cashbook" asp-action="Index">Cashbook</a></li>
+                                        <li><a class="dropdown-item" asp-controller="CashReconciliation" asp-action="Index">Cash Reconciliation</a></li>
+                                    </ul>
+                                </li>
+
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-controller="DailyClose" asp-action="Index">Daily Close</a>
+                                </li>
+                                @* <li class="nav-item"><a class="nav-link" asp-controller="ShiftClose" asp-action="Index">Shift Close</a></li> *@
+                            }
+
+                            @* Administration *@
+                            @if (User.IsInRole("Admin"))
+                            {
+                                <li class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle" href="#" id="navAdminDropdown"
+                                       role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Admin
+                                    </a>
+                                    <ul class="dropdown-menu" aria-labelledby="navAdminDropdown">
+                                        <li><a class="dropdown-item" asp-controller="Stations" asp-action="Index">Stations</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Admin" asp-action="Index">Admin</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Dashboard" asp-action="HQIndex">HQ Dashboard</a></li>
+                                    </ul>
+                                </li>
+                            }
                         </ul>
 
                         <div class="d-flex gap-2 align-items-center">
                             <span class="text-light small">@User.Identity?.Name</span>
                             <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
                                 @Html.AntiForgeryToken()
-                                <button class="btn btn-outline-light btn-sm">Logout</button>
+                                <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
                             </form>
                         </div>
                     </div>

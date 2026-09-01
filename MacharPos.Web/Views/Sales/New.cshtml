@@ -17,7 +17,7 @@
     <h1 class="h5 mb-0">New Sale</h1>
     <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Back</a>
 </div>
-
+<h2>Current Time is : @ViewBag.currentTime </h2>
 @if (ViewBag.UnclosedDate is string unclosed && ViewBag.UnclosedDateDisplay is string unclosedDisplay)
 {
     <div class="alert alert-warning d-flex align-items-start justify-content-between gap-3">

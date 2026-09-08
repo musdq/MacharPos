@@ -125,21 +125,50 @@ public class ProductsController : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> BulkUpdatePrices(
-        decimal pricePerKg,
-        Guid? categoryId = null,
-        Guid? stationId = null,
-        bool showInactive = false)
+      decimal pricePerKg,
+      Guid? categoryId = null,
+      Guid? stationId = null,
+      bool showInactive = false)
     {
         if (pricePerKg <= 0)
         {
             TempData["Err"] = "Please enter a valid price per kg.";
-            return RedirectToAction(nameof(Index), new { categoryId, stationId, showInactive });
+
+            return RedirectToAction(nameof(Index), new
+            {
+                categoryId,
+                stationId,
+                showInactive
+            });
         }
 
         if (!stationId.HasValue)
         {
-            TempData["Err"] = "Please select a station before updating LPG prices.";
-            return RedirectToAction(nameof(Index), new { categoryId, stationId, showInactive });
+            TempData["Err"] =
+                "Please select a station before updating LPG prices.";
+
+            return RedirectToAction(nameof(Index), new
+            {
+                categoryId,
+                stationId,
+                showInactive
+            });
+        }
+
+        var stationExists = await _db.Stations
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == stationId.Value);
+
+        if (!stationExists)
+        {
+            TempData["Err"] = "The selected station was not found.";
+
+            return RedirectToAction(nameof(Index), new
+            {
+                categoryId,
+                stationId = (Guid?)null,
+                showInactive
+            });
         }
 
         var lpgCategory = await _db.ProductCategories
@@ -148,20 +177,50 @@ public class ProductsController : Controller
 
         if (lpgCategory is null)
         {
-            TempData["Err"] = "LPG Refills category was not found.";
-            return RedirectToAction(nameof(Index), new { categoryId, stationId, showInactive });
+            TempData["Err"] =
+                "The LPG Refills category was not found.";
+
+            return RedirectToAction(nameof(Index), new
+            {
+                categoryId,
+                stationId,
+                showInactive
+            });
         }
 
-        var products = await _db.Products
-            .Where(p => p.CategoryId == lpgCategory.Id && p.StationId == stationId.Value)
-            .ToListAsync();
+        var productsQuery = _db.Products
+            .Where(p =>
+                p.CategoryId == lpgCategory.Id &&
+                p.StationId == stationId.Value);
+
+        if (!showInactive)
+        {
+            productsQuery = productsQuery
+                .Where(p => p.IsActive);
+        }
+
+        var products = await productsQuery.ToListAsync();
+
+        if (products.Count == 0)
+        {
+            TempData["Err"] =
+                "No LPG refill products were found for the selected station.";
+
+            return RedirectToAction(nameof(Index), new
+            {
+                categoryId,
+                stationId,
+                showInactive
+            });
+        }
 
         var updatedCount = 0;
         var skippedCount = 0;
 
         foreach (var product in products)
         {
-            if (!product.EquivalentKg.HasValue || product.EquivalentKg.Value <= 0)
+            if (!product.EquivalentKg.HasValue ||
+                product.EquivalentKg.Value <= 0)
             {
                 skippedCount++;
                 continue;
@@ -171,16 +230,27 @@ public class ProductsController : Controller
                 product.EquivalentKg.Value * pricePerKg,
                 2,
                 MidpointRounding.AwayFromZero);
+
             updatedCount++;
         }
 
-        await _db.SaveChangesAsync();
+        if (updatedCount > 0)
+        {
+            await _db.SaveChangesAsync();
+        }
 
-        TempData["Ok"] = $"LPG refill prices updated. Updated {updatedCount} product(s), skipped {skippedCount}.";
-        return RedirectToAction(nameof(Index), new { categoryId, stationId, showInactive });
+        TempData["Ok"] =
+            $"LPG refill prices updated. " +
+            $"Updated {updatedCount} product(s), " +
+            $"skipped {skippedCount}.";
+
+        return RedirectToAction(nameof(Index), new
+        {
+            categoryId,
+            stationId,
+            showInactive
+        });
     }
-
-    [HttpGet]
     public async Task<IActionResult> Delete(Guid id)
     {
         var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id);

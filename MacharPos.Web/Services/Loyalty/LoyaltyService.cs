@@ -8,7 +8,7 @@ namespace MacharPos.Web.Services.Loyalty;
 public class LoyaltyService : ILoyaltyService
 {
     private const int RefillTarget = 6;
-    private const decimal RewardRate = 0.25m;
+    private const decimal RewardRate = 0.15m;
 
     public async Task<LoyaltySnapshot> GetSnapshotAsync(Guid stationId, Guid? customerId)
     {
@@ -90,7 +90,7 @@ public class LoyaltyService : ILoyaltyService
             evaluation.RewardApplied = true;
             evaluation.RewardsRedeemed = 1;
             evaluation.LoyaltyDiscountAmount = Math.Round(bestRewardBase * RewardRate, 2, MidpointRounding.AwayFromZero);
-            evaluation.Message = "25% loyalty discount will be applied to one qualifying refill.";
+            evaluation.Message = "15% loyalty discount will be applied to one qualifying refill.";
         }
         else
         {
